@@ -1,0 +1,27 @@
+---
+/*
+ * Footer kredit. Dipakai di DashboardLayout (semua halaman dashboard) dan
+ * halaman login — ubah teksnya cukup di sini.
+ *
+ * Halaman login belum memuat global.css (masih Tailwind CDN), jadi:
+ * - ukuran & jarak memakai kelas Tailwind dasar yang ada di kedua build;
+ * - warna memakai token, dengan cadangan dari warna teks induk yang
+ *   dipudarkan bila token tidak tersedia.
+ */
+interface Props {
+  class?: string;
+}
+
+const { class: className } = Astro.props;
+---
+
+<footer class:list={['py-6 text-center text-xs', className]}>
+  <!-- Satu baris: kompresi HTML Astro membuang baris baru di antara elemen (spasi hilang). -->
+  <p><span class="label">Build by</span>{' '}<span class="font-semibold">Mulagi Studio</span></p>
+</footer>
+
+<style>
+  .label {
+    color: var(--muted-foreground, color-mix(in srgb, currentColor 60%, transparent));
+  }
+</style>

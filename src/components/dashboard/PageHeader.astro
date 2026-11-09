@@ -1,0 +1,36 @@
+---
+/*
+ * Judul halaman (h1) + deskripsi singkat + aksi.
+ * Slot "meta" = badge kecil di sebelah judul, "actions" = tombol di kanan.
+ */
+interface Props {
+  title: string;
+  description?: string;
+  class?: string;
+}
+
+const { title, description, class: className } = Astro.props;
+---
+
+<div
+  class:list={[
+    'flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between',
+    className,
+  ]}
+>
+  <div class="min-w-0">
+    <div class="flex flex-wrap items-center gap-2">
+      <h1 class="text-2xl font-semibold tracking-tight">{title}</h1>
+      <slot name="meta" />
+    </div>
+    {description && <p class="mt-1 text-sm text-muted-foreground">{description}</p>}
+  </div>
+
+  {
+    Astro.slots.has('actions') && (
+      <div class="flex shrink-0 flex-wrap items-center gap-2">
+        <slot name="actions" />
+      </div>
+    )
+  }
+</div>

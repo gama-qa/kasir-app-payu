@@ -1,0 +1,937 @@
+---
+// src/pages/dashboard/products.astro
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import PageHeader from '../../components/dashboard/PageHeader.astro';
+import Badge from '../../components/ui/Badge.astro';
+import Button from '../../components/ui/Button.astro';
+import Card from '../../components/ui/Card.astro';
+import Dialog from '../../components/ui/Dialog.astro';
+import EmptyState from '../../components/ui/EmptyState.astro';
+import Icon from '../../components/ui/Icon.astro';
+import Input from '../../components/ui/Input.astro';
+import Pagination from '../../components/ui/Pagination.astro';
+import Select from '../../components/ui/Select.astro';
+import Table from '../../components/ui/Table.astro';
+import { LOW_STOCK_LIMIT } from '../../scripts/products';
+
+// Kategori & kode tampil di bawah nama menu (bukan kolom sendiri) agar tabel muat di layar 1280px.
+const columns = [
+  { key: 'name', label: 'Menu' },
+  { key: 'cost', label: 'HPP', numeric: true },
+  { key: 'price', label: 'Harga jual', numeric: true },
+  { key: 'margin', label: 'Untung / porsi', numeric: true },
+  { key: 'stock', label: 'Stok', numeric: true },
+  { key: 'status', label: 'Status' },
+  { key: 'actions', label: 'Aksi', hideLabel: true, align: 'right' as const, sticky: true },
+];
+---
+
+<DashboardLayout title="Produk" active="products">
+  <div class="space-y-6">
+    <PageHeader title="Produk" description="Menu, harga, dan stok merek Anda.">
+      <span slot="meta" id="productSummary" class="text-sm text-muted-foreground" hidden></span>
+      <Button slot="actions" data-action="add-product">
+        <Icon name="plus" />
+        Tambah menu
+      </Button>
+    </PageHeader>
+
+    <Card padding="none">
+      <!-- FILTER -->
+      <div class="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:flex-wrap sm:items-center">
+        <Input
+          id="searchProductTable"
+          label="Cari menu"
+          hideLabel
+          icon="search"
+          type="search"
+          placeholder="Cari nama menu…"
+          autocomplete="off"
+          class="sm:w-72"
+        />
+        <Select id="filterCategory" label="Kategori" hideLabel class="sm:w-48">
+          <option value="ALL">Semua kategori</option>
+        </Select>
+        <Select id="filterStock" label="Status stok" hideLabel class="sm:w-48">
+          <option value="ALL">Semua stok</option>
+          <option value="SAFE">{`Stok aman (> ${LOW_STOCK_LIMIT})`}</option>
+          <option value="LOW">{`Perlu restok (≤ ${LOW_STOCK_LIMIT})`}</option>
+        </Select>
+      </div>
+
+      <!-- DATA. Saat memuat ulang setelah simpan/hapus, tabel lama diredupkan (tanpa kedip skeleton). -->
+      <div
+        id="productsBlock"
+        data-block="products"
+        class="transition-opacity duration-150 data-refreshing:opacity-60"
+      >
+        <div data-view="loading">
+          <Table columns={columns} loading skeletonRows={8} />
+        </div>
+
+        <div data-view="ready" hidden>
+          <Table columns={columns} bodyId="productsTableBody" caption="Daftar menu" />
+          <div class="border-t border-border p-4">
+            <Pagination />
+          </div>
+        </div>
+
+        <div data-view="empty" hidden>
+          <EmptyState
+            icon="utensils-crossed"
+            title="Belum ada menu"
+            description="Menu yang Anda tambahkan akan tampil di sini."
+          >
+            <Button variant="outline" size="sm" data-action="add-product">
+              <Icon name="plus" />
+              Tambah menu
+            </Button>
+          </EmptyState>
+        </div>
+
+        <div data-view="no-results" hidden>
+          <EmptyState icon="search" title="Tidak ada menu yang cocok" description="Ubah kata kunci atau filter.">
+            <Button variant="outline" size="sm" data-action="reset-filters">Hapus filter</Button>
+          </EmptyState>
+        </div>
+
+        <div data-view="error" hidden>
+          <EmptyState variant="error" title="Daftar menu gagal dimuat" descriptionId="productsErrorMessage">
+            <Button variant="outline" size="sm" data-action="retry">
+              <Icon name="refresh-cw" />
+              Coba lagi
+            </Button>
+          </EmptyState>
+        </div>
+      </div>
+    </Card>
+  </div>
+
+  <!-- DIALOG TAMBAH / UBAH MENU -->
+  <Dialog id="productDialog" title="Tambah menu" size="md" dismissible={false}>
+    <form id="productForm" class="grid gap-4">
+      <div class="grid gap-2">
+        <span class="text-xs font-medium">Foto menu</span>
+        <div class="flex items-center gap-4">
+          <div
+            class="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted text-muted-foreground"
+          >
+            <span id="photoPlaceholder" class="flex"><Icon name="image" size={20} /></span>
+            <img id="previewImage" alt="Foto menu" class="size-full object-cover" hidden />
+          </div>
+          <div class="grid min-w-0 gap-2">
+            <div class="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" id="btnPickImage" aria-describedby="photoHint">
+                <Icon name="image-up" />
+                <span data-label>Pilih foto</span>
+              </Button>
+              <Button variant="ghost" size="sm" id="btnRemoveImage" hidden>Hapus foto</Button>
+            </div>
+            <p id="photoHint" class="text-xs text-muted-foreground">JPG, PNG, atau WEBP. Diperkecil otomatis.</p>
+            <p id="photoError" role="alert" class="text-xs text-destructive" hidden></p>
+          </div>
+          <input type="file" id="inputImageFile" accept="image/png, image/jpeg, image/webp" hidden />
+        </div>
+      </div>
+
+      <Input id="inputName" label="Nama menu" placeholder="Mis. Salad roll" autocomplete="off" required autofocus />
+
+      <div class="flex items-end gap-2">
+        <Select id="inputCategory" label="Kategori" class="flex-1"></Select>
+        <Button
+          variant="outline"
+          size="icon"
+          id="btnQuickAddCategory"
+          aria-label="Tambah kategori baru"
+          title="Tambah kategori baru"
+        >
+          <Icon name="plus" />
+        </Button>
+      </div>
+
+      <div class="grid gap-2">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <Input
+            id="inputCostPrice"
+            label="HPP per porsi"
+            prefix="Rp"
+            type="number"
+            inputmode="numeric"
+            min="0"
+            placeholder="18000"
+            required
+          />
+          <Input
+            id="inputPrice"
+            label="Harga jual"
+            prefix="Rp"
+            type="number"
+            inputmode="numeric"
+            min="0"
+            placeholder="32000"
+            required
+          />
+        </div>
+        <p id="marginPreview" class="text-xs text-muted-foreground" hidden></p>
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <Input
+          id="inputStock"
+          label="Stok (porsi)"
+          type="number"
+          inputmode="numeric"
+          min="0"
+          placeholder="50"
+          required
+        />
+        <Select id="inputIsActive" label="Di aplikasi kasir">
+          <option value="true">Tampilkan</option>
+          <option value="false">Sembunyikan</option>
+        </Select>
+      </div>
+
+      <p id="productFormError" role="alert" class="text-sm text-destructive" hidden></p>
+    </form>
+    <Fragment slot="footer">
+      <Button variant="outline" data-dialog-close>Batal</Button>
+      <Button type="submit" form="productForm" id="btnSaveProduct">Simpan</Button>
+    </Fragment>
+  </Dialog>
+
+  <!-- DIALOG KATEGORI BARU (dibuka dari dialog menu) -->
+  <Dialog id="categoryDialog" title="Kategori baru" dismissible={false}>
+    <form id="categoryForm" class="grid gap-3">
+      <Input
+        id="inputCategoryName"
+        label="Nama kategori"
+        placeholder="Mis. Dessert"
+        autocomplete="off"
+        required
+        autofocus
+      />
+      <p id="categoryFormError" role="alert" class="text-sm text-destructive" hidden></p>
+    </form>
+    <Fragment slot="footer">
+      <Button variant="outline" data-dialog-close>Batal</Button>
+      <Button type="submit" form="categoryForm" id="btnSubmitCategory">Simpan</Button>
+    </Fragment>
+  </Dialog>
+
+  <!-- DIALOG TAMBAH STOK -->
+  <Dialog id="restockDialog" title="Tambah stok" dismissible={false}>
+    <form id="restockForm" class="grid gap-4">
+      <dl class="grid grid-cols-2 gap-4 text-sm">
+        <div class="min-w-0">
+          <dt class="text-xs text-muted-foreground">Menu</dt>
+          <dd data-field="restock-name" class="mt-1 font-medium break-words"></dd>
+        </div>
+        <div>
+          <dt class="text-xs text-muted-foreground">Stok saat ini</dt>
+          <dd data-field="restock-current" class="mt-1"></dd>
+        </div>
+      </dl>
+      <div class="grid gap-2">
+        <Input
+          id="inputAddStock"
+          label="Jumlah tambahan (porsi)"
+          type="number"
+          inputmode="numeric"
+          min="1"
+          placeholder="50"
+          required
+          autofocus
+        />
+        <p id="restockPreview" class="text-xs text-muted-foreground" hidden></p>
+      </div>
+      <p id="restockFormError" role="alert" class="text-sm text-destructive" hidden></p>
+    </form>
+    <Fragment slot="footer">
+      <Button variant="outline" data-dialog-close>Batal</Button>
+      <Button type="submit" form="restockForm" id="btnSubmitRestock">Simpan</Button>
+    </Fragment>
+  </Dialog>
+
+  <!-- DIALOG KONFIRMASI HAPUS -->
+  <Dialog
+    id="deleteProductDialog"
+    title="Hapus menu ini?"
+    description="Menu dihapus permanen dari database dan tidak bisa dikembalikan."
+    closable={false}
+  >
+    <div class="grid gap-3">
+      <p id="deleteProductName" class="rounded-lg border border-border px-4 py-3 text-sm font-medium break-words"></p>
+      <p id="deleteProductError" role="alert" class="text-sm text-destructive" hidden></p>
+    </div>
+    <Fragment slot="footer">
+      <Button variant="outline" data-dialog-close>Batal</Button>
+      <Button variant="destructive" id="btnConfirmDelete">Hapus</Button>
+    </Fragment>
+  </Dialog>
+
+  <!-- TEMPLATE BARIS (diisi lewat textContent, aman dari HTML di data) -->
+  <template id="tplProductRow">
+    <tr>
+      <td>
+        <div class="flex min-w-52 items-center gap-3">
+          <span
+            class="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted text-muted-foreground"
+          >
+            <span data-part="thumb-placeholder" class="flex"><Icon name="image" /></span>
+            <img data-part="thumb-image" alt="" loading="lazy" class="size-full object-cover" hidden />
+          </span>
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span data-field="name" class="font-medium"></span>
+              <Badge data-part="inactive" variant="outline" size="sm" hidden title="Tidak tampil di aplikasi kasir">
+                Disembunyikan
+              </Badge>
+            </div>
+            <span class="block text-xs text-muted-foreground">
+              <span data-field="category"></span><span aria-hidden="true"> · </span><span data-field="code"></span>
+            </span>
+          </div>
+        </div>
+      </td>
+      <td data-field="cost" data-numeric class="text-muted-foreground"></td>
+      <td data-field="price" data-numeric class="font-medium"></td>
+      <td data-field="margin" data-numeric></td>
+      <td data-field="stock" data-numeric></td>
+      <td>
+        <Badge variant="success" size="sm" data-stock-status="ok">Tersedia</Badge>
+        <Badge variant="warning" size="sm" data-stock-status="low" hidden>Hampir habis</Badge>
+        <Badge variant="destructive" size="sm" data-stock-status="out" hidden>Habis</Badge>
+      </td>
+      <td data-align="right" data-sticky>
+        <div class="inline-flex items-center gap-1">
+          <Button variant="ghost" size="icon-sm" data-action="restock" title="Tambah stok">
+            <Icon name="package-plus" />
+          </Button>
+          <Button variant="ghost" size="icon-sm" data-action="edit" title="Ubah menu">
+            <Icon name="pencil" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            data-action="delete"
+            title="Hapus menu"
+            class="aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-transparent"
+          >
+            <Icon name="trash-2" />
+          </Button>
+        </div>
+      </td>
+    </tr>
+  </template>
+
+  <script>
+    import { ApiError, apiRequest, getErrorMessage } from '../../scripts/api';
+    import { formatNumber, formatRupiah } from '../../scripts/format';
+    import { resizeImage } from '../../scripts/image';
+    import {
+      getMargin,
+      getProductCode,
+      getStockStatus,
+      LOW_STOCK_LIMIT,
+      type Category,
+      type Product,
+    } from '../../scripts/products';
+    import {
+      byId,
+      cloneTemplate,
+      query,
+      setBusy,
+      setFields,
+      setMessage,
+      setOptions,
+      showView,
+      toast,
+    } from '../../scripts/ui';
+
+    // Catatan: endpoint, parameter, dan payload ke API sama persis dengan versi
+    // sebelumnya. Yang berubah hanya cara menampilkan hasilnya.
+
+    const ITEMS_PER_PAGE = 10;
+    /** Batas file asli dari kamera/galeri; foto diperkecil dulu sebelum diunggah. */
+    const MAX_SOURCE_IMAGE_BYTES = 10 * 1024 * 1024;
+    const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+    type StockFilter = 'ALL' | 'SAFE' | 'LOW';
+    type RowAction = 'restock' | 'edit' | 'delete';
+
+    // ------------------------------------------------------------------
+    // Elemen
+    // ------------------------------------------------------------------
+    const table = {
+      block: byId('productsBlock'),
+      body: byId<HTMLTableSectionElement>('productsTableBody'),
+      summary: byId('productSummary'),
+      errorMessage: byId('productsErrorMessage'),
+      search: byId<HTMLInputElement>('searchProductTable'),
+      filterCategory: byId<HTMLSelectElement>('filterCategory'),
+      filterStock: byId<HTMLSelectElement>('filterStock'),
+      pageInfo: byId('paginationInfo'),
+      pageIndicator: byId('pageIndicator'),
+      prevPage: byId<HTMLButtonElement>('btnPrevPage'),
+      nextPage: byId<HTMLButtonElement>('btnNextPage'),
+    };
+
+    const productDialog = {
+      root: byId<HTMLDialogElement>('productDialog'),
+      title: byId('productDialog-title'),
+      form: byId<HTMLFormElement>('productForm'),
+      name: byId<HTMLInputElement>('inputName'),
+      category: byId<HTMLSelectElement>('inputCategory'),
+      addCategory: byId<HTMLButtonElement>('btnQuickAddCategory'),
+      costPrice: byId<HTMLInputElement>('inputCostPrice'),
+      price: byId<HTMLInputElement>('inputPrice'),
+      marginPreview: byId('marginPreview'),
+      stock: byId<HTMLInputElement>('inputStock'),
+      isActive: byId<HTMLSelectElement>('inputIsActive'),
+      imageInput: byId<HTMLInputElement>('inputImageFile'),
+      imagePreview: byId<HTMLImageElement>('previewImage'),
+      imagePlaceholder: byId('photoPlaceholder'),
+      pickImage: byId<HTMLButtonElement>('btnPickImage'),
+      removeImage: byId<HTMLButtonElement>('btnRemoveImage'),
+      imageError: byId('photoError'),
+      error: byId('productFormError'),
+      submit: byId<HTMLButtonElement>('btnSaveProduct'),
+    };
+
+    const categoryDialog = {
+      root: byId<HTMLDialogElement>('categoryDialog'),
+      form: byId<HTMLFormElement>('categoryForm'),
+      name: byId<HTMLInputElement>('inputCategoryName'),
+      error: byId('categoryFormError'),
+      submit: byId<HTMLButtonElement>('btnSubmitCategory'),
+    };
+
+    const restockDialog = {
+      root: byId<HTMLDialogElement>('restockDialog'),
+      form: byId<HTMLFormElement>('restockForm'),
+      amount: byId<HTMLInputElement>('inputAddStock'),
+      preview: byId('restockPreview'),
+      error: byId('restockFormError'),
+      submit: byId<HTMLButtonElement>('btnSubmitRestock'),
+    };
+
+    const deleteDialog = {
+      root: byId<HTMLDialogElement>('deleteProductDialog'),
+      name: byId('deleteProductName'),
+      error: byId('deleteProductError'),
+      confirm: byId<HTMLButtonElement>('btnConfirmDelete'),
+    };
+
+    // ------------------------------------------------------------------
+    // State
+    // ------------------------------------------------------------------
+    const state = {
+      products: [] as Product[],
+      filtered: [] as Product[],
+      categories: [] as Category[],
+      page: 1,
+      /** id menu yang sedang diubah; null = tambah menu baru. */
+      editingId: null as number | null,
+      /** Foto di form: data URL foto baru, URL foto lama, atau null. */
+      image: null as string | null,
+      restockId: null as number | null,
+      deleteId: null as number | null,
+    };
+
+    // ------------------------------------------------------------------
+    // Sesi — tanpa sesi diarahkan ke /login, brand default 1 (TIDAK BERUBAH)
+    // ------------------------------------------------------------------
+    function readSession(): { brand_id?: number } | null {
+      try {
+        return JSON.parse(localStorage.getItem('user_session') ?? 'null');
+      } catch {
+        return null;
+      }
+    }
+
+    const session = readSession();
+    const brandId = session?.brand_id || 1;
+
+    // ------------------------------------------------------------------
+    // Ambil data
+    // ------------------------------------------------------------------
+    async function loadCategories(): Promise<void> {
+      try {
+        const { data } = await apiRequest<Category[]>(`/api/categories?brand_id=${brandId}`);
+        state.categories = data ?? [];
+        renderCategoryOptions();
+      } catch (error) {
+        // Tabel tetap bisa tampil tanpa kategori; cukup dicatat.
+        console.error('Gagal memuat kategori:', error);
+      }
+    }
+
+    async function loadProducts({ refresh = false } = {}): Promise<void> {
+      if (refresh) table.block.dataset.refreshing = '';
+      else showView('products', 'loading');
+      table.block.setAttribute('aria-busy', 'true');
+
+      try {
+        const { data } = await apiRequest<Product[]>(`/api/products?brand_id=${brandId}`);
+        state.products = data ?? [];
+        renderSummary();
+        applyFilters();
+      } catch (error) {
+        table.errorMessage.textContent = getErrorMessage(error);
+        showView('products', 'error');
+      } finally {
+        delete table.block.dataset.refreshing;
+        table.block.removeAttribute('aria-busy');
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // Tampilan daftar
+    // ------------------------------------------------------------------
+    function renderCategoryOptions(): void {
+      const toOption = (category: Category) => new Option(category.name, String(category.id));
+
+      setOptions(table.filterCategory, [new Option('Semua kategori', 'ALL'), ...state.categories.map(toOption)]);
+      setOptions(
+        productDialog.category,
+        state.categories.length > 0 ? state.categories.map(toOption) : [new Option('Belum ada kategori', '')],
+      );
+    }
+
+    function renderSummary(): void {
+      const total = state.products.length;
+      const needRestock = state.products.filter((product) => getStockStatus(product.stock) !== 'ok').length;
+
+      table.summary.textContent =
+        needRestock > 0
+          ? `${formatNumber(total)} menu · ${formatNumber(needRestock)} perlu restok`
+          : `${formatNumber(total)} menu`;
+      table.summary.hidden = total === 0;
+    }
+
+    function renderTable(): void {
+      const total = state.filtered.length;
+      if (total === 0) {
+        showView('products', state.products.length === 0 ? 'empty' : 'no-results');
+        return;
+      }
+
+      const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
+      state.page = Math.min(Math.max(state.page, 1), totalPages);
+      const start = (state.page - 1) * ITEMS_PER_PAGE;
+      const pageItems = state.filtered.slice(start, start + ITEMS_PER_PAGE);
+
+      table.body.replaceChildren(...pageItems.map(createRow));
+      renderPagination(start + 1, start + pageItems.length, total, totalPages);
+      showView('products', 'ready');
+    }
+
+    function createRow(product: Product): DocumentFragment {
+      const row = cloneTemplate('tplProductRow');
+      const margin = getMargin(product);
+      const stockStatus = getStockStatus(product.stock);
+
+      query(row, 'tr').dataset.id = String(product.id);
+      setFields(row, {
+        name: product.name,
+        code: getProductCode(product),
+        category: product.category_name || 'Umum',
+        cost: formatRupiah(product.cost_price),
+        price: formatRupiah(product.price),
+        margin: formatRupiah(margin),
+        stock: formatNumber(product.stock),
+      });
+
+      query(row, '[data-field="margin"]').classList.toggle('text-destructive', margin < 0);
+      query(row, '[data-part="inactive"]').hidden = product.is_active;
+      row.querySelectorAll<HTMLElement>('[data-stock-status]').forEach((badge) => {
+        badge.hidden = badge.dataset.stockStatus !== stockStatus;
+      });
+
+      renderThumbnail(row, product.image_url);
+      labelRowActions(row, product);
+      return row;
+    }
+
+    function renderThumbnail(row: ParentNode, imageUrl: string | null): void {
+      if (!imageUrl) return;
+      const image = query<HTMLImageElement>(row, '[data-part="thumb-image"]');
+      image.src = imageUrl;
+      image.hidden = false;
+      query(row, '[data-part="thumb-placeholder"]').hidden = true;
+    }
+
+    /** Label tombol aksi menyebut nama menu, agar jelas bagi pembaca layar. */
+    function labelRowActions(row: ParentNode, product: Product): void {
+      query(row, '[data-action="restock"]').setAttribute('aria-label', `Tambah stok ${product.name}`);
+      query(row, '[data-action="edit"]').setAttribute('aria-label', `Ubah ${product.name}`);
+
+      const deleteButton = query(row, '[data-action="delete"]');
+      if (product.has_transactions) {
+        // Sama seperti sebelumnya: menu yang sudah pernah terjual tidak bisa dihapus.
+        deleteButton.setAttribute('aria-disabled', 'true');
+        deleteButton.title = 'Tidak bisa dihapus karena sudah ada riwayat transaksi';
+        deleteButton.setAttribute('aria-label', `${product.name} tidak bisa dihapus karena sudah ada riwayat transaksi`);
+      } else {
+        deleteButton.setAttribute('aria-label', `Hapus ${product.name}`);
+      }
+    }
+
+    function renderPagination(from: number, to: number, total: number, totalPages: number): void {
+      table.pageInfo.textContent = `Menampilkan ${from}–${to} dari ${formatNumber(total)} menu`;
+      table.pageIndicator.textContent = `Halaman ${state.page} dari ${totalPages}`;
+      table.prevPage.disabled = state.page <= 1;
+      table.nextPage.disabled = state.page >= totalPages;
+    }
+
+    function goToPage(page: number): void {
+      state.page = page;
+      renderTable();
+    }
+
+    // ------------------------------------------------------------------
+    // Filter — aturan pencocokan TIDAK BERUBAH
+    // ------------------------------------------------------------------
+    function applyFilters(): void {
+      const keyword = table.search.value.toLowerCase();
+      const categoryId = table.filterCategory.value;
+      const stockFilter = table.filterStock.value as StockFilter;
+
+      state.filtered = state.products.filter(
+        (product) =>
+          product.name.toLowerCase().includes(keyword) &&
+          (categoryId === 'ALL' || String(product.category_id) === categoryId) &&
+          matchesStockFilter(product, stockFilter),
+      );
+      state.page = 1;
+      renderTable();
+    }
+
+    function matchesStockFilter(product: Product, filter: StockFilter): boolean {
+      if (filter === 'SAFE') return product.stock > LOW_STOCK_LIMIT;
+      if (filter === 'LOW') return product.stock <= LOW_STOCK_LIMIT;
+      return true;
+    }
+
+    function resetFilters(): void {
+      table.search.value = '';
+      table.filterCategory.value = 'ALL';
+      table.filterStock.value = 'ALL';
+      applyFilters();
+    }
+
+    function findProduct(id: number | string | null | undefined): Product | undefined {
+      return state.products.find((product) => String(product.id) === String(id));
+    }
+
+    const rowActions: Record<RowAction, (product: Product) => void> = {
+      restock: openRestockDialog,
+      edit: openEditDialog,
+      delete: openDeleteDialog,
+    };
+
+    function handleRowAction(event: MouseEvent): void {
+      const button = (event.target as Element).closest<HTMLElement>('[data-action]');
+      if (!button || button.getAttribute('aria-disabled') === 'true') return;
+
+      const product = findProduct(button.closest('tr')?.dataset.id);
+      const action = rowActions[button.dataset.action as RowAction];
+      if (product && action) action(product);
+    }
+
+    // ------------------------------------------------------------------
+    // Dialog tambah / ubah menu
+    // ------------------------------------------------------------------
+    function openAddDialog(): void {
+      resetProductForm('Tambah menu');
+      productDialog.root.showModal();
+    }
+
+    function openEditDialog(product: Product): void {
+      resetProductForm('Ubah menu');
+      state.editingId = product.id;
+      productDialog.name.value = product.name;
+      productDialog.category.value = String(product.category_id || state.categories[0]?.id || '');
+      productDialog.costPrice.value = String(Number(product.cost_price) || 0);
+      productDialog.price.value = String(Number(product.price));
+      productDialog.stock.value = String(product.stock);
+      productDialog.isActive.value = product.is_active ? 'true' : 'false';
+      setImage(product.image_url || null);
+      updateMarginPreview();
+      productDialog.root.showModal();
+    }
+
+    function resetProductForm(title: string): void {
+      productDialog.title.textContent = title;
+      productDialog.form.reset();
+      state.editingId = null;
+      setImage(null);
+      setMessage(productDialog.imageError, null);
+      setMessage(productDialog.error, null);
+      updateMarginPreview();
+    }
+
+    function updateMarginPreview(): void {
+      const { price, costPrice, marginPreview } = productDialog;
+      if (price.value === '') {
+        setMessage(marginPreview, null);
+        return;
+      }
+
+      const margin = getMargin({ price: price.value, cost_price: costPrice.value });
+      setMessage(marginPreview, `Estimasi untung ${formatRupiah(margin)} per porsi`);
+      marginPreview.classList.toggle('text-destructive', margin < 0);
+    }
+
+    function setImage(src: string | null): void {
+      const { imagePreview, imagePlaceholder, removeImage, imageInput } = productDialog;
+      state.image = src;
+
+      if (src) imagePreview.src = src;
+      else imagePreview.removeAttribute('src');
+
+      imagePreview.hidden = !src;
+      imagePlaceholder.hidden = Boolean(src);
+      removeImage.hidden = !src;
+      imageInput.value = ''; // agar file yang sama bisa dipilih lagi
+    }
+
+    /**
+     * Foto diperkecil di browser lalu diunggah sebagai file; yang disimpan ke
+     * produk hanya URL-nya (bukan base64 di database seperti sebelumnya).
+     */
+    async function handleImageSelected(): Promise<void> {
+      const file = productDialog.imageInput.files?.[0];
+      if (!file) return;
+
+      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+        productDialog.imageInput.value = '';
+        setMessage(productDialog.imageError, 'Format foto harus JPG, PNG, atau WEBP.');
+        return;
+      }
+      if (file.size > MAX_SOURCE_IMAGE_BYTES) {
+        productDialog.imageInput.value = '';
+        setMessage(productDialog.imageError, 'Ukuran foto maksimal 10 MB.');
+        return;
+      }
+
+      setMessage(productDialog.imageError, null);
+      setBusy(productDialog.pickImage, true, 'Mengunggah…');
+      productDialog.submit.disabled = true;
+
+      try {
+        const image = await resizeImage(file);
+        const { data } = await apiRequest<{ url: string }>('/api/uploads/product-image', {
+          method: 'POST',
+          body: { image },
+        });
+        if (!data?.url) throw new Error('URL foto kosong');
+        setImage(data.url);
+      } catch (error) {
+        productDialog.imageInput.value = '';
+        setMessage(
+          productDialog.imageError,
+          error instanceof ApiError ? error.message : 'Foto tidak bisa diproses. Coba file lain.',
+        );
+      } finally {
+        setBusy(productDialog.pickImage, false);
+        productDialog.submit.disabled = false;
+      }
+    }
+
+    async function saveProduct(event: SubmitEvent): Promise<void> {
+      event.preventDefault();
+      setMessage(productDialog.error, null);
+      setBusy(productDialog.submit, true, 'Menyimpan…');
+
+      const categoryId = productDialog.category.value;
+      const payload = {
+        id: state.editingId,
+        brand_id: brandId,
+        category_id: categoryId ? Number(categoryId) : null,
+        name: productDialog.name.value,
+        cost_price: Number(productDialog.costPrice.value),
+        price: Number(productDialog.price.value),
+        stock: Number(productDialog.stock.value),
+        is_active: productDialog.isActive.value === 'true',
+        image_url: state.image || null,
+      };
+
+      try {
+        await apiRequest('/api/products', { method: 'POST', body: payload });
+        productDialog.root.close();
+        toast({ title: 'Menu disimpan', message: `${payload.name} berhasil disimpan.` });
+        await loadProducts({ refresh: true });
+      } catch (error) {
+        setMessage(productDialog.error, getErrorMessage(error));
+      } finally {
+        setBusy(productDialog.submit, false);
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // Dialog kategori baru
+    // ------------------------------------------------------------------
+    function openCategoryDialog(): void {
+      categoryDialog.form.reset();
+      setMessage(categoryDialog.error, null);
+      categoryDialog.root.showModal();
+    }
+
+    async function saveCategory(event: SubmitEvent): Promise<void> {
+      event.preventDefault();
+      const name = categoryDialog.name.value.trim();
+      if (!name) {
+        setMessage(categoryDialog.error, 'Nama kategori wajib diisi.');
+        return;
+      }
+
+      setMessage(categoryDialog.error, null);
+      setBusy(categoryDialog.submit, true, 'Menyimpan…');
+
+      try {
+        const { data } = await apiRequest<Category>('/api/categories', {
+          method: 'POST',
+          body: { brand_id: brandId, name },
+        });
+        categoryDialog.root.close();
+        await loadCategories();
+        // Kategori baru langsung dipilih di form menu yang masih terbuka.
+        if (data) productDialog.category.value = String(data.id);
+      } catch (error) {
+        setMessage(categoryDialog.error, getErrorMessage(error));
+      } finally {
+        setBusy(categoryDialog.submit, false);
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // Dialog tambah stok
+    // ------------------------------------------------------------------
+    function openRestockDialog(product: Product): void {
+      state.restockId = product.id;
+      restockDialog.form.reset();
+      setMessage(restockDialog.error, null);
+      setFields(restockDialog.root, {
+        'restock-name': product.name,
+        'restock-current': `${formatNumber(product.stock)} porsi`,
+      });
+      updateRestockPreview();
+      restockDialog.root.showModal();
+    }
+
+    function updateRestockPreview(): void {
+      const product = findProduct(state.restockId);
+      const amount = Number(restockDialog.amount.value);
+      setMessage(
+        restockDialog.preview,
+        product && amount > 0 ? `Stok menjadi ${formatNumber(Number(product.stock) + amount)} porsi` : null,
+      );
+    }
+
+    async function saveRestock(event: SubmitEvent): Promise<void> {
+      event.preventDefault();
+      const amount = Number(restockDialog.amount.value);
+      if (!amount || amount <= 0) {
+        setMessage(restockDialog.error, 'Masukkan jumlah porsi yang valid.');
+        return;
+      }
+
+      const product = findProduct(state.restockId);
+      if (!product) return;
+
+      setMessage(restockDialog.error, null);
+      setBusy(restockDialog.submit, true, 'Menyimpan…');
+
+      try {
+        // Payload TIDAK BERUBAH: seluruh data menu dengan stok yang sudah ditambah.
+        await apiRequest('/api/products', {
+          method: 'POST',
+          body: { ...product, stock: Number(product.stock) + amount },
+        });
+        restockDialog.root.close();
+        toast({ title: 'Stok ditambahkan', message: `Stok ${product.name} bertambah ${formatNumber(amount)} porsi.` });
+        await loadProducts({ refresh: true });
+      } catch (error) {
+        setMessage(restockDialog.error, getErrorMessage(error));
+      } finally {
+        setBusy(restockDialog.submit, false);
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // Dialog hapus
+    // ------------------------------------------------------------------
+    function openDeleteDialog(product: Product): void {
+      state.deleteId = product.id;
+      deleteDialog.name.textContent = product.name;
+      setMessage(deleteDialog.error, null);
+      deleteDialog.root.showModal();
+    }
+
+    async function confirmDelete(): Promise<void> {
+      const product = findProduct(state.deleteId);
+      if (!product) return;
+
+      setMessage(deleteDialog.error, null);
+      setBusy(deleteDialog.confirm, true, 'Menghapus…');
+
+      try {
+        // apiRequest mengirim Content-Type JSON, sehingga lolos cek origin Astro
+        // di server (aaPanel/Nginx + HTTPS). Lihat src/scripts/api.ts.
+        await apiRequest(`/api/products?id=${product.id}&brand_id=${brandId}`, { method: 'DELETE' });
+        deleteDialog.root.close();
+        toast({ title: 'Menu dihapus', message: `${product.name} sudah dihapus.` });
+        await loadProducts({ refresh: true });
+      } catch (error) {
+        setMessage(deleteDialog.error, getErrorMessage(error));
+      } finally {
+        setBusy(deleteDialog.confirm, false);
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // Event
+    // ------------------------------------------------------------------
+    function onClick(selector: string, handler: () => void): void {
+      document.querySelectorAll(selector).forEach((element) => element.addEventListener('click', handler));
+    }
+
+    table.search.addEventListener('input', applyFilters);
+    table.filterCategory.addEventListener('change', applyFilters);
+    table.filterStock.addEventListener('change', applyFilters);
+    table.prevPage.addEventListener('click', () => goToPage(state.page - 1));
+    table.nextPage.addEventListener('click', () => goToPage(state.page + 1));
+    table.body.addEventListener('click', handleRowAction);
+    onClick('[data-action="add-product"]', openAddDialog);
+    onClick('[data-action="reset-filters"]', resetFilters);
+    onClick('[data-action="retry"]', () => void init());
+
+    productDialog.form.addEventListener('submit', saveProduct);
+    productDialog.price.addEventListener('input', updateMarginPreview);
+    productDialog.costPrice.addEventListener('input', updateMarginPreview);
+    productDialog.pickImage.addEventListener('click', () => productDialog.imageInput.click());
+    productDialog.imageInput.addEventListener('change', handleImageSelected);
+    productDialog.removeImage.addEventListener('click', () => setImage(null));
+    productDialog.addCategory.addEventListener('click', openCategoryDialog);
+
+    categoryDialog.form.addEventListener('submit', saveCategory);
+    restockDialog.form.addEventListener('submit', saveRestock);
+    restockDialog.amount.addEventListener('input', updateRestockPreview);
+    deleteDialog.confirm.addEventListener('click', confirmDelete);
+
+    // ------------------------------------------------------------------
+    // Mulai
+    // ------------------------------------------------------------------
+    async function init(): Promise<void> {
+      await loadCategories();
+      await loadProducts();
+    }
+
+    if (session) {
+      void init();
+    } else {
+      window.location.href = '/login';
+    }
+  </script>
+</DashboardLayout>

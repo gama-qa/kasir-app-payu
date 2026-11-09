@@ -1,0 +1,10 @@
+---
+// src/pages/dashboard/inventory.astro — fitur premium (terkunci untuk paket Gratis).
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import PremiumGate from '../../components/dashboard/PremiumGate.astro';
+import { PREMIUM_FEATURES } from '../../scripts/plan';
+---
+
+<DashboardLayout title={PREMIUM_FEATURES.inventory.title} active="inventory">
+  <PremiumGate feature="inventory" />
+</DashboardLayout>

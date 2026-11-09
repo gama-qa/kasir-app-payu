@@ -1,0 +1,1100 @@
+---
+// src/pages/cashier/cashierPage.astro — layar utama kasir (tablet, dibuka lewat APK).
+import CashierLayout from '../../layouts/CashierLayout.astro';
+import PrinterDialog from '../../components/cashier/PrinterDialog.astro';
+import PrinterIndicator from '../../components/cashier/PrinterIndicator.astro';
+import QtyStepper from '../../components/cashier/QtyStepper.astro';
+import Badge from '../../components/ui/Badge.astro';
+import Button from '../../components/ui/Button.astro';
+import Dialog from '../../components/ui/Dialog.astro';
+import EmptyState from '../../components/ui/EmptyState.astro';
+import Icon from '../../components/ui/Icon.astro';
+import Input from '../../components/ui/Input.astro';
+import type { IconName } from '../../components/ui/icons';
+
+const PAYMENT_METHODS: { value: string; label: string; icon: IconName }[] = [
+  { value: 'CASH', label: 'Tunai', icon: 'banknote' },
+  { value: 'QRIS', label: 'QRIS', icon: 'qr-code' },
+  { value: 'EDC', label: 'Debit/EDC', icon: 'credit-card' },
+];
+
+// Rincian di dialog "Transaksi berhasil". cashOnly: hanya untuk pembayaran tunai.
+const SUCCESS_DETAILS = [
+  { field: 'code', label: 'Kode nota' },
+  { field: 'customer', label: 'Pelanggan' },
+  { field: 'method', label: 'Metode bayar' },
+  { field: 'total', label: 'Total bayar' },
+  { field: 'cash', label: 'Uang diterima', cashOnly: true },
+];
+
+const QUICK_CASH = [
+  { value: 20000, label: '20rb' },
+  { value: 50000, label: '50rb' },
+  { value: 100000, label: '100rb' },
+];
+
+// 2 kolom di ponsel, lalu kolom otomatis selebar ±168px di tablet.
+const catalogGrid = 'grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))]';
+const brandPill =
+  'h-10 shrink-0 rounded-full border border-border bg-background px-4 text-sm font-semibold text-muted-foreground transition-colors duration-150 hover:text-foreground aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground';
+const methodOption =
+  'flex h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-border bg-background px-2 text-sm font-semibold text-muted-foreground transition-colors duration-150 has-checked:border-primary has-checked:bg-primary/8 has-checked:text-primary has-focus-visible:ring-2 has-focus-visible:ring-ring';
+---
+
+<CashierLayout title="Kasir" bodyClass="h-dvh overflow-hidden select-none">
+  <div id="cashierShell" data-panel="closed" class="group/shell flex h-full flex-col">
+    <!-- HEADER -->
+    <header class="flex h-16 shrink-0 items-center gap-3 border-b border-border px-4 lg:px-6">
+      <img src="/payu-logo-2.png" alt="MADEBYPAYU" width="96" height="28" class="h-7 w-auto shrink-0" />
+      <Input
+        id="searchProduct"
+        label="Cari menu"
+        hideLabel
+        icon="search"
+        type="search"
+        placeholder="Cari menu…"
+        autocomplete="off"
+        class="max-w-md min-w-0 flex-1"
+      />
+
+      <div class="ml-auto flex shrink-0 items-center gap-2">
+        <Button variant="outline" href="/cashier/historyTransactions" title="Riwayat transaksi">
+          <Icon name="history" />
+          <span class="max-md:sr-only">Riwayat</span>
+        </Button>
+        <Button variant="outline" data-dialog-open="printerDialog" title="Printer Bluetooth" class="max-w-56">
+          <Icon name="bluetooth" />
+          <PrinterIndicator labelClass="max-md:sr-only" />
+        </Button>
+
+        <div class="hidden items-center gap-2 pl-2 xl:flex">
+          <span
+            id="cashierAvatar"
+            aria-hidden="true"
+            class="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
+            >AK</span
+          >
+          <div class="leading-tight">
+            <p id="cashierName" class="text-sm font-semibold">Admin Kasir</p>
+            <p class="text-xs text-muted-foreground">Kasir POS Multi-Brand</p>
+          </div>
+        </div>
+        <Button variant="ghost" size="icon" data-dialog-open="logoutDialog" title="Keluar shift kasir">
+          <Icon name="log-out" label="Keluar shift kasir" />
+        </Button>
+      </div>
+    </header>
+
+    <div class="flex min-h-0 flex-1">
+      <!-- KATALOG -->
+      <section aria-label="Katalog menu" class="flex min-w-0 flex-1 flex-col">
+        <div
+          id="brandFilter"
+          role="group"
+          aria-label="Filter merek"
+          class="flex shrink-0 gap-2 overflow-x-auto px-4 pt-4 pb-3 lg:px-6"
+        >
+          <button type="button" data-brand="ALL" aria-pressed="true" class={brandPill}>Semua menu</button>
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-24 lg:px-6 lg:pb-6">
+          <div data-block="catalog">
+            <div data-view="loading" aria-hidden="true" class={catalogGrid}>
+              {
+                Array.from({ length: 8 }, () => (
+                  <div class="rounded-xl border border-border bg-background p-2.5">
+                    <div class="aspect-[4/3] rounded-lg bg-muted" />
+                    <div class="mt-3 h-4 w-3/4 rounded-md bg-muted" />
+                    <div class="mt-2 h-4 w-1/2 rounded-md bg-muted" />
+                  </div>
+                ))
+              }
+            </div>
+            <div id="productGrid" data-view="ready" class={catalogGrid} hidden></div>
+            <div data-view="empty" hidden>
+              <EmptyState
+                icon="utensils-crossed"
+                title="Belum ada menu"
+                description="Tambahkan menu di Dashboard Owner agar tampil di kasir."
+              />
+            </div>
+            <div data-view="no-results" hidden>
+              <EmptyState icon="search" title="Menu tidak ditemukan" description="Ubah kata kunci atau pilih merek lain." />
+            </div>
+            <div data-view="error" hidden>
+              <EmptyState variant="error" title="Katalog gagal dimuat" descriptionId="catalogErrorMessage">
+                <Button variant="outline" size="sm" data-action="retry-catalog">
+                  <Icon name="refresh-cw" />
+                  Coba lagi
+                </Button>
+              </EmptyState>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Latar gelap saat panel pesanan dibuka di layar kecil -->
+      <div
+        data-panel-close
+        aria-hidden="true"
+        class="fixed inset-0 z-30 hidden bg-overlay max-lg:group-data-[panel=open]/shell:block"
+      >
+      </div>
+
+      <!-- PANEL PESANAN: kolom kanan di lg+, panel geser di layar kecil -->
+      <aside
+        id="orderPanel"
+        aria-label="Pesanan"
+        class="fixed inset-y-0 right-0 z-40 hidden w-full max-w-md flex-col border-l border-border bg-background max-lg:group-data-[panel=open]/shell:flex lg:static lg:flex lg:w-[380px] lg:max-w-none xl:w-[400px]"
+      >
+        <div class="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div>
+            <h2 class="text-base font-bold">Pesanan</h2>
+            <p class="text-xs text-muted-foreground"><span data-cart-count>0</span> item</p>
+          </div>
+          <div class="flex items-center gap-1">
+            <Button variant="ghost" size="icon-sm" id="btnClearCart" title="Kosongkan pesanan">
+              <Icon name="rotate-ccw" label="Kosongkan pesanan" />
+            </Button>
+            <Button variant="ghost" size="icon-sm" class="lg:hidden" data-panel-close title="Tutup panel pesanan">
+              <Icon name="x" label="Tutup panel pesanan" />
+            </Button>
+          </div>
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <div class="p-4">
+            <ul id="cartList" class="grid gap-2"></ul>
+            <div id="cartEmpty">
+              <EmptyState size="sm" icon="shopping-bag" title="Belum ada pesanan" description="Ketuk menu untuk menambahkan." />
+            </div>
+          </div>
+
+          <!-- DETAIL PEMBAYARAN -->
+          <div class="grid gap-4 border-t border-border p-4">
+            <Input
+              id="inputCustomerName"
+              label="Nama pelanggan / meja (opsional)"
+              placeholder="Pelanggan umum / No. meja"
+              autocomplete="off"
+              maxlength="60"
+            />
+            <div class="grid grid-cols-2 gap-3">
+              <Input
+                id="inputDiscountPercent"
+                label="Diskon (%)"
+                type="number"
+                inputmode="numeric"
+                min="0"
+                max="100"
+                placeholder="0"
+              />
+              <Input
+                id="inputNote"
+                label="Catatan"
+                placeholder="Less ice, takeaway"
+                autocomplete="off"
+                maxlength="200"
+              />
+            </div>
+
+            <fieldset>
+              <legend class="text-xs font-medium">Metode pembayaran</legend>
+              <div class="mt-2 grid grid-cols-3 gap-2">
+                {
+                  PAYMENT_METHODS.map((method) => (
+                    <label class={methodOption}>
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value={method.value}
+                        checked={method.value === 'CASH'}
+                        class="sr-only"
+                      />
+                      <Icon name={method.icon} />
+                      {method.label}
+                    </label>
+                  ))
+                }
+              </div>
+            </fieldset>
+
+            <div id="cashPaymentSection" class="grid gap-2">
+              <div class="flex items-end gap-2">
+                <Input
+                  id="cashGivenInput"
+                  label="Uang diterima"
+                  prefix="Rp"
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  placeholder="0"
+                  class="flex-1"
+                />
+                <Button variant="outline" id="btnExactPay">Uang pas</Button>
+              </div>
+              <div class="grid grid-cols-3 gap-2">
+                {
+                  QUICK_CASH.map((cash) => (
+                    <Button variant="secondary" size="sm" data-quick-cash={cash.value}>
+                      {cash.label}
+                    </Button>
+                  ))
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RINGKASAN & BAYAR (selalu terlihat) -->
+        <div class="shrink-0 border-t border-border p-4">
+          <dl class="grid gap-1.5 text-sm">
+            <div class="flex justify-between gap-4">
+              <dt class="text-muted-foreground">Subtotal</dt>
+              <dd id="subtotalText" class="font-semibold tabular-nums">Rp 0</dd>
+            </div>
+            <div class="flex justify-between gap-4">
+              <dt id="discountLabel" class="text-muted-foreground">Diskon (0%)</dt>
+              <dd id="discountText" class="font-semibold tabular-nums">-Rp 0</dd>
+            </div>
+            <div id="changeRow" class="flex justify-between gap-4">
+              <dt class="text-muted-foreground">Kembalian</dt>
+              <dd id="changeGivenText" class="font-semibold tabular-nums data-[short]:text-destructive">Rp 0</dd>
+            </div>
+            <div class="mt-1 flex items-baseline justify-between gap-4 border-t border-dashed border-border pt-2">
+              <dt class="font-semibold">Total bayar</dt>
+              <dd id="totalText" class="text-xl font-bold tabular-nums">Rp 0</dd>
+            </div>
+          </dl>
+          <Button variant="success" size="lg" id="btnPrintReceipt" class="mt-3 w-full" disabled>
+            <Icon name="printer" />
+            <span data-label>Bayar & cetak struk</span>
+          </Button>
+          <p
+            id="checkoutStatus"
+            aria-live="polite"
+            class="mt-2 min-h-4 text-center text-xs text-muted-foreground data-[tone=error]:text-destructive"
+          >
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Bilah bawah untuk membuka panel pesanan di layar kecil -->
+    <div class="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background p-3 lg:hidden">
+      <Button size="lg" class="w-full" data-panel-open>
+        <Icon name="shopping-bag" />
+        <span class="flex-1 text-left">Lihat pesanan (<span data-cart-count>0</span>)</span>
+        <span data-cart-total class="tabular-nums">Rp 0</span>
+      </Button>
+    </div>
+  </div>
+
+  <PrinterDialog />
+
+  <!-- DIALOG TRANSAKSI BERHASIL (muncul setelah pesanan tersimpan) -->
+  <Dialog
+    id="successDialog"
+    title="Transaksi berhasil"
+    description="Pesanan sudah tersimpan."
+    align="center"
+    closable={false}
+  >
+    <span slot="icon" class="flex size-12 items-center justify-center rounded-xl border border-border text-success">
+      <Icon name="circle-check" size={28} />
+    </span>
+    <div class="grid gap-4">
+      <div class="rounded-lg bg-muted px-4 py-3 text-center">
+        <p data-field="highlight-label" class="text-xs text-muted-foreground">Kembalian</p>
+        <p data-field="highlight-value" class="mt-1 text-3xl font-bold tabular-nums"></p>
+      </div>
+      <dl class="grid gap-2 text-sm">
+        {
+          SUCCESS_DETAILS.map((detail) => (
+            <div class="flex justify-between gap-4" data-cash-only={detail.cashOnly ? '' : undefined}>
+              <dt class="shrink-0 text-muted-foreground">{detail.label}</dt>
+              <dd data-field={detail.field} class="min-w-0 truncate text-right font-medium tabular-nums" />
+            </div>
+          ))
+        }
+      </dl>
+      <p aria-live="polite" class="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <span
+          data-print-dot
+          data-tone="muted"
+          aria-hidden="true"
+          class="size-2 shrink-0 rounded-full bg-muted-foreground data-[tone=destructive]:bg-destructive data-[tone=success]:bg-success data-[tone=warning]:bg-warning"
+        ></span>
+        <span data-field="print"></span>
+      </p>
+    </div>
+    <Fragment slot="footer">
+      <Button variant="outline" id="btnSuccessConnect" class="sm:flex-1" data-dialog-open="printerDialog" hidden>
+        <Icon name="bluetooth" />
+        Hubungkan printer
+      </Button>
+      <Button variant="outline" id="btnSuccessPrint" class="sm:flex-1" hidden>
+        <Icon name="printer" />
+        <span data-label>Cetak ulang struk</span>
+      </Button>
+      <Button id="btnNewOrder" class="sm:flex-1" data-dialog-close autofocus>Transaksi baru</Button>
+    </Fragment>
+  </Dialog>
+
+  <Dialog
+    id="logoutDialog"
+    title="Keluar shift kasir?"
+    description="Anda perlu masuk lagi untuk melanjutkan transaksi."
+    closable={false}
+  >
+    <Fragment slot="footer">
+      <Button variant="outline" data-dialog-close>Batal</Button>
+      <Button variant="destructive" id="btnConfirmLogout">Keluar</Button>
+    </Fragment>
+  </Dialog>
+
+  <!-- TEMPLATE (diisi lewat textContent, aman dari HTML di data) -->
+  <template id="tplBrandPill">
+    <button type="button" data-brand aria-pressed="false" class={brandPill}></button>
+  </template>
+
+  <template id="tplProductCard">
+    <article
+      class="group/card flex flex-col rounded-xl border border-border bg-background p-2.5 transition-colors duration-150 data-[in-cart]:border-primary data-[in-cart]:ring-1 data-[in-cart]:ring-primary"
+    >
+      <button
+        type="button"
+        data-action="add"
+        class="block w-full rounded-lg text-left disabled:cursor-not-allowed"
+      >
+        <span class="relative block aspect-[4/3] overflow-hidden rounded-lg bg-muted">
+          <span data-part="placeholder" class="absolute inset-0 flex items-center justify-center text-muted-foreground">
+            <Icon name="utensils-crossed" size={24} />
+          </span>
+          <img
+            data-part="image"
+            alt=""
+            loading="lazy"
+            decoding="async"
+            class="size-full object-cover group-data-[sold-out]/card:grayscale"
+            hidden
+          />
+          <span
+            data-field="stock"
+            class="absolute top-2 left-2 rounded-md bg-background/90 px-1.5 py-0.5 text-xs font-semibold"></span>
+          <Badge data-part="sold-out" variant="destructive" size="sm" class="absolute top-2 right-2 bg-background" hidden>
+            Habis
+          </Badge>
+        </span>
+        <span data-field="brand" class="mt-2 block truncate text-[11px] font-semibold tracking-wide text-muted-foreground uppercase"
+        ></span>
+        <span data-field="name" class="mt-0.5 line-clamp-2 min-h-10 text-sm leading-5 font-semibold"></span>
+        <span data-field="price" class="mt-1 block text-sm font-bold"></span>
+      </button>
+
+      <div class="mt-2">
+        <button
+          type="button"
+          data-action="add"
+          data-part="add-button"
+          class="flex h-9 w-full items-center justify-center gap-1.5 rounded-full bg-primary text-sm font-semibold text-primary-foreground transition-colors duration-150 hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
+        >
+          <Icon name="plus" class="group-data-[sold-out]/card:hidden" />
+          <span data-label>Tambah</span>
+        </button>
+        <QtyStepper class="w-full justify-between rounded-full border border-border p-0.5" />
+      </div>
+    </article>
+  </template>
+
+  <template id="tplCartItem">
+    <li class="flex items-center gap-3 rounded-lg border border-border p-2">
+      <span class="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted text-muted-foreground">
+        <span data-part="placeholder" class="flex"><Icon name="utensils-crossed" size={16} /></span>
+        <img data-part="image" alt="" decoding="async" class="absolute inset-0 size-full object-cover" hidden />
+      </span>
+      <span class="min-w-0 flex-1">
+        <span data-field="name" class="block truncate text-sm font-semibold"></span>
+        <span data-field="line" class="block text-xs text-muted-foreground tabular-nums"></span>
+      </span>
+      <QtyStepper size="sm" />
+      <button
+        type="button"
+        data-action="remove"
+        class="flex size-8 shrink-0 items-center justify-center rounded-md border border-destructive/30 text-destructive transition-colors duration-150 hover:bg-destructive/10"
+      >
+        <Icon name="trash-2" size={14} />
+      </button>
+    </li>
+  </template>
+
+  <script>
+    import { apiRequest, getErrorMessage, type ApiBody } from '../../scripts/api';
+    import { getPrinterState, hasConfiguredPrinter, onPrinterChange, printText } from '../../scripts/cashier/printer';
+    import { printerErrorMessage } from '../../scripts/cashier/printer-ui';
+    import { buildReceipt, type ReceiptData } from '../../scripts/cashier/receipt';
+    import {
+      CASHIER_LOGIN_URL,
+      clearCashierSession,
+      getInitials,
+      readCashierSession,
+    } from '../../scripts/cashier/session';
+    import { formatNumber, formatRupiah } from '../../scripts/format';
+    import { byId, cloneTemplate, query, setBusy, setFields, showView, toast } from '../../scripts/ui';
+
+    // ------------------------------------------------------------------
+    // Tipe & konstanta
+    // ------------------------------------------------------------------
+    /** Bentuk data dari GET /api/products. */
+    interface ApiProduct {
+      id: number;
+      brand_id: number;
+      brand_name: string | null;
+      name: string;
+      price: number | string;
+      cost_price: number | string | null;
+      stock: number;
+      is_active?: boolean;
+      image_url?: string | null;
+      image?: string | null;
+    }
+
+    interface Product {
+      id: number;
+      brandId: number;
+      brand: string;
+      name: string;
+      price: number;
+      costPrice: number;
+      stock: number;
+      image: string | null;
+    }
+
+    type PaymentMethod = 'CASH' | 'QRIS' | 'EDC';
+
+    interface Totals {
+      subtotal: number;
+      discountPercent: number;
+      discountAmount: number;
+      grandTotal: number;
+      method: PaymentMethod;
+      cashGiven: number;
+    }
+
+    /** Status cetak struk yang ditampilkan di dialog "Transaksi berhasil". */
+    type PrintState = 'printing' | 'printed' | 'failed' | 'skipped' | 'ready' | 'unavailable';
+
+    const PRINT_MESSAGES: Record<PrintState, { tone: 'muted' | 'warning' | 'success' | 'destructive'; text: string }> = {
+      printing: { tone: 'warning', text: 'Mencetak struk…' },
+      printed: { tone: 'success', text: 'Struk sudah dicetak' },
+      failed: { tone: 'destructive', text: 'Struk gagal dicetak' },
+      skipped: { tone: 'muted', text: 'Struk tidak dicetak: printer belum dihubungkan' },
+      ready: { tone: 'muted', text: 'Printer terhubung, struk belum dicetak' },
+      unavailable: { tone: 'muted', text: 'Struk hanya bisa dicetak dari aplikasi kasir di tablet' },
+    };
+
+    const DEFAULT_CUSTOMER = 'Pelanggan Umum';
+    const SEARCH_DELAY_MS = 150;
+
+    // ------------------------------------------------------------------
+    // Elemen
+    // ------------------------------------------------------------------
+    const shell = byId('cashierShell');
+    const catalog = {
+      grid: byId('productGrid'),
+      brandFilter: byId('brandFilter'),
+      search: byId<HTMLInputElement>('searchProduct'),
+      errorMessage: byId('catalogErrorMessage'),
+    };
+    const order = {
+      list: byId<HTMLUListElement>('cartList'),
+      empty: byId('cartEmpty'),
+      clear: byId<HTMLButtonElement>('btnClearCart'),
+      customerName: byId<HTMLInputElement>('inputCustomerName'),
+      discount: byId<HTMLInputElement>('inputDiscountPercent'),
+      note: byId<HTMLInputElement>('inputNote'),
+      cashSection: byId('cashPaymentSection'),
+      cashGiven: byId<HTMLInputElement>('cashGivenInput'),
+      exactPay: byId<HTMLButtonElement>('btnExactPay'),
+      subtotal: byId('subtotalText'),
+      discountLabel: byId('discountLabel'),
+      discountAmount: byId('discountText'),
+      changeRow: byId('changeRow'),
+      change: byId('changeGivenText'),
+      total: byId('totalText'),
+      pay: byId<HTMLButtonElement>('btnPrintReceipt'),
+      payLabel: query(byId('btnPrintReceipt'), '[data-label]'),
+      status: byId('checkoutStatus'),
+    };
+
+    const success = {
+      root: byId<HTMLDialogElement>('successDialog'),
+      printDot: query(byId('successDialog'), '[data-print-dot]'),
+      connect: byId<HTMLButtonElement>('btnSuccessConnect'),
+      print: byId<HTMLButtonElement>('btnSuccessPrint'),
+    };
+
+    // ------------------------------------------------------------------
+    // State
+    // ------------------------------------------------------------------
+    const state = {
+      products: [] as Product[],
+      productById: new Map<number, Product>(),
+      /** productId → qty. Urutan sisip = urutan pesanan. */
+      cart: new Map<number, number>(),
+      brand: 'ALL',
+      search: '',
+      saving: false,
+      /** Struk transaksi terakhir, untuk tombol cetak ulang di dialog sukses. */
+      lastReceipt: null as ReceiptData | null,
+      printState: 'skipped' as PrintState,
+    };
+    const cardById = new Map<number, HTMLElement>();
+
+    // ------------------------------------------------------------------
+    // Sesi & profil (tanpa sesi → halaman login kasir, seperti sebelumnya)
+    // ------------------------------------------------------------------
+    const session = readCashierSession();
+
+    function renderProfile(): void {
+      byId('cashierName').textContent = session?.name || 'Admin Kasir';
+      byId('cashierAvatar').textContent = getInitials(session?.name);
+    }
+
+    // ------------------------------------------------------------------
+    // Katalog
+    // ------------------------------------------------------------------
+    /** Path gambar relatif dijadikan absolut (perilaku lama dipertahankan). */
+    function normalizeImage(src: string | null | undefined): string | null {
+      if (!src) return null;
+      return src.startsWith('http') || src.startsWith('data:') || src.startsWith('/') ? src : `/${src}`;
+    }
+
+    function toProduct(item: ApiProduct): Product {
+      return {
+        id: item.id,
+        brandId: item.brand_id,
+        brand: item.brand_name || `Merek #${item.brand_id}`,
+        name: item.name,
+        price: Number(item.price),
+        costPrice: Number(item.cost_price || 0),
+        stock: Number(item.stock),
+        image: normalizeImage(item.image || item.image_url),
+      };
+    }
+
+    async function loadProducts({ refresh = false } = {}): Promise<void> {
+      if (!refresh) showView('catalog', 'loading');
+      try {
+        const { data } = await apiRequest<ApiProduct[]>('/api/products');
+        // Menu yang disetel "Sembunyikan dari kasir" di dashboard tidak ditampilkan.
+        state.products = (data ?? []).filter((item) => item.is_active !== false).map(toProduct);
+        state.productById = new Map(state.products.map((product) => [product.id, product]));
+        renderBrandFilters();
+        renderCatalog();
+      } catch (error) {
+        if (refresh) {
+          toast({ title: 'Stok belum diperbarui', message: getErrorMessage(error), variant: 'error' });
+          return;
+        }
+        catalog.errorMessage.textContent = getErrorMessage(error);
+        showView('catalog', 'error');
+      }
+    }
+
+    function renderBrandFilters(): void {
+      const brands = [...new Set(state.products.map((product) => product.brand))];
+      if (state.brand !== 'ALL' && !brands.includes(state.brand)) state.brand = 'ALL';
+
+      const pills = brands.map((brand) => {
+        const pill = query<HTMLButtonElement>(cloneTemplate('tplBrandPill'), 'button');
+        pill.dataset.brand = brand;
+        pill.textContent = brand;
+        return pill;
+      });
+      const allPill = query<HTMLButtonElement>(catalog.brandFilter, '[data-brand="ALL"]');
+      catalog.brandFilter.replaceChildren(allPill, ...pills);
+      syncBrandPills();
+    }
+
+    function syncBrandPills(): void {
+      catalog.brandFilter.querySelectorAll<HTMLElement>('[data-brand]').forEach((pill) => {
+        pill.setAttribute('aria-pressed', String(pill.dataset.brand === state.brand));
+      });
+    }
+
+    function matchesFilters(product: Product): boolean {
+      const matchBrand = state.brand === 'ALL' || product.brand === state.brand;
+      return matchBrand && product.name.toLowerCase().includes(state.search.toLowerCase());
+    }
+
+    function renderCatalog(): void {
+      if (state.products.length === 0) return showView('catalog', 'empty');
+
+      const visible = state.products.filter(matchesFilters);
+      if (visible.length === 0) return showView('catalog', 'no-results');
+
+      cardById.clear();
+      catalog.grid.replaceChildren(...visible.map(createProductCard));
+      showView('catalog', 'ready');
+    }
+
+    function createProductCard(product: Product): DocumentFragment {
+      const fragment = cloneTemplate('tplProductCard');
+      const card = query(fragment, 'article');
+      const soldOut = product.stock <= 0;
+
+      card.dataset.productId = String(product.id);
+      card.toggleAttribute('data-sold-out', soldOut);
+      setFields(card, {
+        brand: product.brand,
+        name: product.name,
+        price: formatRupiah(product.price),
+        stock: `${formatNumber(product.stock)} stok`,
+      });
+      query(card, '[data-part="sold-out"]').hidden = !soldOut;
+      if (soldOut) query(card, '[data-part="add-button"] [data-label]').textContent = 'Habis';
+      card.querySelectorAll<HTMLButtonElement>('[data-action="add"]').forEach((button) => {
+        button.disabled = soldOut;
+        button.setAttribute('aria-label', soldOut ? `${product.name} habis` : `Tambah ${product.name}`);
+      });
+      labelStepper(card, product.name);
+      showImage(card, product);
+
+      cardById.set(product.id, card);
+      syncCard(product.id);
+      return fragment;
+    }
+
+    function showImage(root: ParentNode, product: Product): void {
+      if (!product.image) return;
+      const image = query<HTMLImageElement>(root, '[data-part="image"]');
+      image.src = product.image;
+      image.hidden = false;
+      query(root, '[data-part="placeholder"]').hidden = true;
+    }
+
+    function labelStepper(root: ParentNode, name: string): void {
+      query(root, '[data-action="decrease"]').setAttribute('aria-label', `Kurangi ${name}`);
+      query(root, '[data-action="increase"]').setAttribute('aria-label', `Tambah ${name}`);
+    }
+
+    /** Perbarui tampilan satu kartu (tombol tambah ↔ stepper) tanpa merender ulang katalog. */
+    function syncCard(productId: number): void {
+      const card = cardById.get(productId);
+      if (!card) return;
+      const qty = state.cart.get(productId) ?? 0;
+      card.toggleAttribute('data-in-cart', qty > 0);
+      query(card, '[data-part="add-button"]').hidden = qty > 0;
+      query(card, '[data-part="stepper"]').hidden = qty === 0;
+      setFields(card, { qty: String(qty) });
+    }
+
+    // ------------------------------------------------------------------
+    // Keranjang — aturan stok TIDAK BERUBAH
+    // ------------------------------------------------------------------
+    function stockError(message: string): void {
+      toast({ title: 'Stok tidak cukup', message, variant: 'error' });
+    }
+
+    function addToCart(productId: number): void {
+      const product = state.productById.get(productId);
+      if (!product) return;
+
+      const qty = state.cart.get(productId) ?? 0;
+      if (qty === 0 && product.stock <= 0) return stockError('Stok menu ini habis.');
+      if (qty >= product.stock) return stockError('Jumlah pesanan sudah mencapai stok tersedia.');
+
+      state.cart.set(productId, qty + 1);
+      onCartChange(productId);
+    }
+
+    function decreaseQty(productId: number): void {
+      const qty = state.cart.get(productId) ?? 0;
+      if (qty <= 1) state.cart.delete(productId);
+      else state.cart.set(productId, qty - 1);
+      onCartChange(productId);
+    }
+
+    function removeFromCart(productId: number): void {
+      state.cart.delete(productId);
+      onCartChange(productId);
+    }
+
+    function onCartChange(productId?: number): void {
+      renderCart();
+      if (productId === undefined) cardById.forEach((_, id) => syncCard(id));
+      else syncCard(productId);
+    }
+
+    function cartLines() {
+      return [...state.cart]
+        .map(([id, qty]) => ({ product: state.productById.get(id), qty }))
+        .filter((line): line is { product: Product; qty: number } => Boolean(line.product));
+    }
+
+    function renderCart(): void {
+      const lines = cartLines();
+      order.list.replaceChildren(...lines.map(({ product, qty }) => createCartRow(product, qty)));
+      order.empty.hidden = lines.length > 0;
+
+      const count = lines.reduce((sum, line) => sum + line.qty, 0);
+      document.querySelectorAll('[data-cart-count]').forEach((element) => {
+        element.textContent = formatNumber(count);
+      });
+      renderSummary();
+    }
+
+    function createCartRow(product: Product, qty: number): DocumentFragment {
+      const row = cloneTemplate('tplCartItem');
+      query(row, 'li').dataset.productId = String(product.id);
+      setFields(row, {
+        name: product.name,
+        line: `${formatNumber(qty)} × ${formatRupiah(product.price)}`,
+        qty: String(qty),
+      });
+      query(row, '[data-action="remove"]').setAttribute('aria-label', `Hapus ${product.name}`);
+      labelStepper(row, product.name);
+      showImage(row, product);
+      return row;
+    }
+
+    // ------------------------------------------------------------------
+    // Perhitungan — rumus TIDAK BERUBAH
+    // ------------------------------------------------------------------
+    function selectedMethod(): PaymentMethod {
+      return (document.querySelector<HTMLInputElement>('input[name="paymentMethod"]:checked')?.value ??
+        'CASH') as PaymentMethod;
+    }
+
+    function computeTotals(): Totals {
+      const subtotal = cartLines().reduce((sum, { product, qty }) => sum + product.price * qty, 0);
+      const discountPercent = Math.min(Math.max(Number(order.discount.value) || 0, 0), 100);
+      const discountAmount = Math.round(subtotal * (discountPercent / 100));
+      return {
+        subtotal,
+        discountPercent,
+        discountAmount,
+        grandTotal: Math.max(0, subtotal - discountAmount),
+        method: selectedMethod(),
+        cashGiven: Number(order.cashGiven.value) || 0,
+      };
+    }
+
+    function renderSummary(): void {
+      const totals = computeTotals();
+      const hasItems = state.cart.size > 0;
+      const isCash = totals.method === 'CASH';
+      const shortBy = totals.grandTotal - totals.cashGiven;
+
+      order.subtotal.textContent = formatRupiah(totals.subtotal);
+      order.discountLabel.textContent = `Diskon (${totals.discountPercent}%)`;
+      order.discountAmount.textContent = `-${formatRupiah(totals.discountAmount)}`;
+      order.total.textContent = formatRupiah(totals.grandTotal);
+      document.querySelectorAll('[data-cart-total]').forEach((element) => {
+        element.textContent = formatRupiah(totals.grandTotal);
+      });
+
+      order.cashSection.hidden = !isCash;
+      order.changeRow.hidden = !isCash;
+      const isShort = isCash && hasItems && shortBy > 0;
+      order.change.toggleAttribute('data-short', isShort);
+      order.change.textContent = isShort
+        ? `Kurang ${formatRupiah(shortBy)}`
+        : formatRupiah(hasItems && isCash ? -shortBy : 0);
+
+      order.pay.disabled = state.saving || !hasItems || isShort;
+    }
+
+    // ------------------------------------------------------------------
+    // Bayar: simpan transaksi dulu, baru cetak (cetak gagal ≠ transaksi batal)
+    // ------------------------------------------------------------------
+    function setCheckoutStatus(message: string, tone: 'info' | 'error' = 'info'): void {
+      order.status.textContent = message;
+      order.status.dataset.tone = tone;
+    }
+
+    function setSaving(saving: boolean): void {
+      state.saving = saving;
+      order.payLabel.textContent = saving ? 'Menyimpan…' : 'Bayar & cetak struk';
+      renderSummary();
+    }
+
+    function resetOrder(): void {
+      state.cart.clear();
+      order.customerName.value = '';
+      order.discount.value = '';
+      order.note.value = '';
+      order.cashGiven.value = '';
+      onCartChange();
+    }
+
+    async function checkout(): Promise<void> {
+      if (state.cart.size === 0 || state.saving) return;
+
+      const totals = computeTotals();
+      const lines = cartLines();
+      const customerName = order.customerName.value.trim() || DEFAULT_CUSTOMER;
+      const note = order.note.value.trim();
+      const cashGiven = totals.cashGiven || totals.grandTotal;
+
+      // Nama pelanggan opsional → "Pelanggan Umum". Catatan kini ikut disimpan & dicetak.
+      const payload = {
+        cashier_id: session?.id || 1,
+        customer_name: customerName,
+        payment_method: totals.method,
+        discount_percent: totals.discountPercent || 0,
+        discount_amount: totals.discountAmount || 0,
+        cash_given: cashGiven,
+        change_given: Math.max(0, cashGiven - totals.grandTotal),
+        note: note || null,
+        items: lines.map(({ product, qty }) => ({
+          product_id: product.id,
+          brand_id: product.brandId,
+          qty,
+          price_at_sale: product.price,
+          cost_price_at_sale: product.costPrice || 0,
+          subtotal: product.price * qty,
+        })),
+      };
+
+      setSaving(true);
+      setCheckoutStatus('Menyimpan transaksi…');
+
+      try {
+        const { transaction_code: code } = await apiRequest<never, ApiBody<never> & { transaction_code: string }>(
+          '/api/transactions/create',
+          { method: 'POST', body: payload },
+        );
+
+        resetOrder();
+        closePanel();
+        showSuccess({
+          code,
+          customerName,
+          method: totals.method,
+          total: totals.grandTotal,
+          cashGiven,
+          change: payload.change_given,
+        });
+
+        void printReceipt({
+          code,
+          customerName,
+          note,
+          date: new Date(),
+          items: lines.map(({ product, qty }) => ({
+            name: product.name,
+            qty,
+            price: product.price,
+            subtotal: product.price * qty,
+          })),
+          total: totals.grandTotal,
+        });
+        void loadProducts({ refresh: true }); // stok terbaru
+      } catch (error) {
+        const message = getErrorMessage(error);
+        setCheckoutStatus(message, 'error');
+        toast({ title: 'Transaksi gagal disimpan', message, variant: 'error' });
+      } finally {
+        setSaving(false);
+      }
+    }
+
+    async function printReceipt(receipt: ReceiptData): Promise<void> {
+      state.lastReceipt = receipt;
+
+      if (getPrinterState().status === 'unavailable' || !hasConfiguredPrinter()) {
+        setPrintState(getPrinterState().status === 'unavailable' ? 'unavailable' : 'skipped');
+        setCheckoutStatus(`Transaksi ${receipt.code} tersimpan (tanpa cetak struk).`);
+        return;
+      }
+
+      setPrintState('printing');
+      setCheckoutStatus('Mencetak struk…');
+      try {
+        await printText(buildReceipt(receipt));
+        setPrintState('printed');
+        setCheckoutStatus(`Transaksi ${receipt.code} selesai, struk dicetak.`);
+      } catch (error) {
+        const message = printerErrorMessage(error);
+        setPrintState('failed', message);
+        setCheckoutStatus(`Transaksi ${receipt.code} tersimpan, struk gagal dicetak.`, 'error');
+        // Toast tidak terlihat di atas dialog modal; saat dialog terbuka, pesannya ada di dialog.
+        if (!success.root.open) toast({ title: 'Struk gagal dicetak', message, variant: 'error' });
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // Dialog "Transaksi berhasil"
+    // ------------------------------------------------------------------
+    function paymentLabel(method: PaymentMethod): string {
+      const radio = document.querySelector(`input[name="paymentMethod"][value="${method}"]`);
+      return radio?.closest('label')?.textContent?.trim() || method;
+    }
+
+    function showSuccess(result: {
+      code: string;
+      customerName: string;
+      method: PaymentMethod;
+      total: number;
+      cashGiven: number;
+      change: number;
+    }): void {
+      const isCash = result.method === 'CASH';
+      setFields(success.root, {
+        // Tunai: kembalian dibuat paling menonjol agar kasir langsung tahu uang yang harus diserahkan.
+        'highlight-label': isCash ? 'Kembalian' : 'Total dibayar',
+        'highlight-value': formatRupiah(isCash ? result.change : result.total),
+        code: result.code,
+        customer: result.customerName,
+        method: paymentLabel(result.method),
+        total: formatRupiah(result.total),
+        cash: formatRupiah(result.cashGiven),
+      });
+      success.root.querySelectorAll<HTMLElement>('[data-cash-only]').forEach((row) => {
+        row.hidden = !isCash;
+      });
+      setPrintState(hasConfiguredPrinter() ? 'printing' : 'skipped');
+      success.root.showModal();
+    }
+
+    function setPrintState(printState: PrintState, detail?: string): void {
+      state.printState = printState;
+      const view = PRINT_MESSAGES[printState];
+      success.printDot.dataset.tone = view.tone;
+      setFields(success.root, { print: detail ? `${view.text}. ${detail}` : view.text });
+      syncSuccessActions();
+    }
+
+    /** Tombol di dialog sukses: hubungkan printer dulu, atau cetak (ulang) struk. */
+    function syncSuccessActions(): void {
+      const needsAction = ['failed', 'skipped', 'ready'].includes(state.printState);
+      const printerReady = hasConfiguredPrinter();
+      success.connect.hidden = !needsAction || printerReady || getPrinterState().status === 'unavailable';
+      success.print.hidden = !needsAction || !printerReady;
+      query(success.print, '[data-label]').textContent =
+        state.printState === 'failed' ? 'Cetak ulang struk' : 'Cetak struk';
+    }
+
+    async function reprintLastReceipt(): Promise<void> {
+      if (!state.lastReceipt) return;
+      setBusy(success.print, true, 'Mencetak…');
+      await printReceipt(state.lastReceipt);
+      setBusy(success.print, false);
+      syncSuccessActions();
+    }
+
+    // ------------------------------------------------------------------
+    // Panel pesanan di layar kecil
+    // ------------------------------------------------------------------
+    function openPanel(): void {
+      shell.dataset.panel = 'open';
+    }
+
+    function closePanel(): void {
+      shell.dataset.panel = 'closed';
+    }
+
+    // ------------------------------------------------------------------
+    // Event
+    // ------------------------------------------------------------------
+    function productIdOf(element: Element): number | null {
+      const id = element.closest<HTMLElement>('[data-product-id]')?.dataset.productId;
+      return id ? Number(id) : null;
+    }
+
+    function handleItemAction(event: MouseEvent): void {
+      const button = (event.target as Element).closest<HTMLButtonElement>('button[data-action]');
+      const productId = button && productIdOf(button);
+      if (!button || productId === null || button.disabled) return;
+
+      const action = button.dataset.action;
+      if (action === 'add' || action === 'increase') addToCart(productId);
+      else if (action === 'decrease') decreaseQty(productId);
+      else if (action === 'remove') removeFromCart(productId);
+    }
+
+    // Gambar gagal dimuat → kembali ke ikon (event "error" tidak bubble, jadi pakai capture).
+    function handleImageError(event: Event): void {
+      const image = event.target;
+      if (!(image instanceof HTMLImageElement)) return;
+      image.hidden = true;
+      const placeholder = image.parentElement?.querySelector<HTMLElement>('[data-part="placeholder"]');
+      if (placeholder) placeholder.hidden = false;
+    }
+
+    let searchTimer: ReturnType<typeof setTimeout> | undefined;
+    catalog.search.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        state.search = catalog.search.value;
+        renderCatalog();
+      }, SEARCH_DELAY_MS);
+    });
+
+    catalog.brandFilter.addEventListener('click', (event) => {
+      const pill = (event.target as Element).closest<HTMLElement>('[data-brand]');
+      if (!pill) return;
+      state.brand = pill.dataset.brand || 'ALL';
+      syncBrandPills();
+      renderCatalog();
+    });
+
+    catalog.grid.addEventListener('click', handleItemAction);
+    catalog.grid.addEventListener('error', handleImageError, true);
+    order.list.addEventListener('click', handleItemAction);
+    order.list.addEventListener('error', handleImageError, true);
+
+    order.clear.addEventListener('click', () => {
+      if (state.cart.size > 0) resetOrder();
+    });
+    order.discount.addEventListener('input', renderSummary);
+    order.cashGiven.addEventListener('input', renderSummary);
+    document.querySelectorAll('input[name="paymentMethod"]').forEach((radio) => {
+      radio.addEventListener('change', renderSummary);
+    });
+    order.exactPay.addEventListener('click', () => {
+      order.cashGiven.value = String(computeTotals().grandTotal);
+      renderSummary();
+    });
+    document.querySelectorAll<HTMLElement>('[data-quick-cash]').forEach((button) => {
+      button.addEventListener('click', () => {
+        order.cashGiven.value = button.dataset.quickCash ?? '';
+        renderSummary();
+      });
+    });
+    order.pay.addEventListener('click', checkout);
+    success.print.addEventListener('click', reprintLastReceipt);
+    // Setelah printer dihubungkan dari dialog sukses: status & tombol berganti menjadi "Cetak struk".
+    onPrinterChange(() => {
+      if (state.printState === 'skipped' && hasConfiguredPrinter()) setPrintState('ready');
+      else syncSuccessActions();
+    });
+
+    document.querySelectorAll('[data-panel-open]').forEach((element) => element.addEventListener('click', openPanel));
+    document.querySelectorAll('[data-panel-close]').forEach((element) => element.addEventListener('click', closePanel));
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && shell.dataset.panel === 'open' && !document.querySelector('dialog[open]')) {
+        closePanel();
+      }
+    });
+    document.querySelector('[data-action="retry-catalog"]')?.addEventListener('click', () => void loadProducts());
+
+    byId('btnConfirmLogout').addEventListener('click', () => {
+      clearCashierSession();
+      window.location.href = CASHIER_LOGIN_URL;
+    });
+
+    // ------------------------------------------------------------------
+    // Mulai
+    // ------------------------------------------------------------------
+    if (session) {
+      renderProfile();
+      renderCart();
+      void loadProducts();
+    } else {
+      window.location.href = CASHIER_LOGIN_URL;
+    }
+  </script>
+</CashierLayout>

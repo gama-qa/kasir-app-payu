@@ -1,0 +1,10 @@
+{
+  "appId": "com.madebypayu.app",
+  "appName": "madebypayu_kasir_app",
+  "webDir": "capacitor-web",
+  "server": {
+    "url": "https://madebypayu.shop/cashier",
+    "cleartext": true,
+    "errorPath": "offline.html"
+  }
+}

@@ -1,0 +1,74 @@
+---
+/*
+ * Halaman fitur premium yang terkunci untuk paket Gratis.
+ * Isi (judul, ringkasan, manfaat) dari PREMIUM_FEATURES di src/scripts/plan.ts.
+ * Tombol "Upgrade ke Premium" tampil bila UPGRADE_URL sudah diisi.
+ */
+import Badge from '../ui/Badge.astro';
+import Button from '../ui/Button.astro';
+import Card from '../ui/Card.astro';
+import Icon from '../ui/Icon.astro';
+import PageHeader from './PageHeader.astro';
+import { PREMIUM_FEATURES, UPGRADE_URL, type PremiumFeatureKey } from '../../scripts/plan';
+
+interface Props {
+  feature: PremiumFeatureKey;
+}
+
+const feature = PREMIUM_FEATURES[Astro.props.feature];
+---
+
+<div class="space-y-6">
+  <PageHeader title={feature.title} description={feature.summary}>
+    <Badge slot="meta" variant="outline">
+      <Icon name="lock" size={12} />
+      Premium
+    </Badge>
+  </PageHeader>
+
+  <Card>
+    <div class="mx-auto max-w-2xl py-6 text-center sm:py-10">
+      <span class="mx-auto flex size-12 items-center justify-center rounded-xl border border-border text-primary">
+        <Icon name={feature.icon} size={24} />
+      </span>
+      <h2 class="mt-4 text-lg font-semibold">Fitur ini khusus paket Premium</h2>
+      <p class="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+        {feature.title} dapat digunakan setelah akun Anda berlangganan Premium. Saat ini akun Anda memakai{' '}
+        <span data-session-field="plan" class="font-medium text-foreground">Paket Gratis</span>.
+      </p>
+
+      <ul class="mt-8 grid gap-3 text-left sm:grid-cols-2" aria-label={`Yang didapat dengan ${feature.title}`}>
+        {
+          feature.benefits.map((benefit) => (
+            <li class="flex items-start gap-3 rounded-lg border border-border p-3 text-sm">
+              <Icon name="circle-check" class="mt-0.5 text-primary" />
+              <span>{benefit}</span>
+            </li>
+          ))
+        }
+      </ul>
+
+      <div class="mt-8 flex flex-col-reverse justify-center gap-2 sm:flex-row">
+        <Button variant="outline" href="/dashboard">Kembali ke Ringkasan</Button>
+        {
+          UPGRADE_URL && (
+            <Button href={UPGRADE_URL} target="_blank" rel="noopener">
+              <Icon name="crown" />
+              Upgrade ke Premium
+            </Button>
+          )
+        }
+      </div>
+      {
+        !UPGRADE_URL && (
+          <p class="mt-4 text-xs text-muted-foreground">Untuk berlangganan Premium, hubungi Mulagi Studio.</p>
+        )
+      }
+    </div>
+  </Card>
+</div>
+
+<script>
+  // Sama seperti halaman dashboard lain: tanpa sesi owner → kembali ke halaman login ("/").
+  if (!localStorage.getItem('user_session')) window.location.href = '/';
+</script>

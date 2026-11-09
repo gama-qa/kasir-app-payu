@@ -1,0 +1,28 @@
+---
+/*
+ * Titik status + label printer Bluetooth. Diisi otomatis oleh
+ * bindPrinterIndicators() (src/scripts/cashier/printer-ui.ts) lewat atribut data-printer-*.
+ */
+interface Props {
+  /** Tampilkan baris kedua (nama printer / keterangan). */
+  showDetail?: boolean;
+  /** Kelas untuk label, mis. "max-md:sr-only" agar hanya titik yang terlihat di layar kecil. */
+  labelClass?: string;
+  class?: string;
+}
+
+const { showDetail = false, labelClass, class: className } = Astro.props;
+---
+
+<span class:list={['flex min-w-0 items-center gap-2', className]}>
+  <span
+    data-printer-dot
+    data-tone="muted"
+    aria-hidden="true"
+    class="size-2.5 shrink-0 rounded-full bg-muted-foreground data-[tone=destructive]:bg-destructive data-[tone=success]:bg-success data-[tone=warning]:bg-warning"
+  ></span>
+  <span class:list={['min-w-0 text-left leading-tight', labelClass]}>
+    <span data-printer-label class="block truncate">Memeriksa printer…</span>
+    {showDetail && <span data-printer-detail class="block truncate text-xs font-normal text-muted-foreground"></span>}
+  </span>
+</span>

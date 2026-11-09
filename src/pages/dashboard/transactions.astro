@@ -1,0 +1,587 @@
+---
+// src/pages/dashboard/transactions.astro
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import PageHeader from '../../components/dashboard/PageHeader.astro';
+import Badge from '../../components/ui/Badge.astro';
+import Button from '../../components/ui/Button.astro';
+import Card from '../../components/ui/Card.astro';
+import Dialog from '../../components/ui/Dialog.astro';
+import EmptyState from '../../components/ui/EmptyState.astro';
+import Icon from '../../components/ui/Icon.astro';
+import Input from '../../components/ui/Input.astro';
+import Pagination from '../../components/ui/Pagination.astro';
+import Select from '../../components/ui/Select.astro';
+import Table from '../../components/ui/Table.astro';
+
+const columns = [
+  { key: 'code', label: 'Kode nota' },
+  { key: 'date', label: 'Waktu' },
+  { key: 'cashier', label: 'Kasir' },
+  { key: 'items', label: 'Menu' },
+  { key: 'total', label: 'Total merek', numeric: true },
+  { key: 'method', label: 'Metode' },
+  { key: 'actions', label: 'Aksi', hideLabel: true, align: 'right' as const, sticky: true },
+];
+
+// Preset rentang cepat. "Semua" aktif di awal karena memang belum ada filter tanggal.
+const quickRanges = [
+  { range: 'today', label: 'Hari ini' },
+  { range: 'week', label: 'Minggu ini' },
+  { range: 'month', label: 'Bulan ini' },
+  { range: 'all', label: 'Semua' },
+];
+const quickRangeClass =
+  'btn-quick-range h-9 px-3 text-sm whitespace-nowrap text-muted-foreground transition-colors duration-150 not-first:border-l not-first:border-input hover:text-foreground aria-pressed:bg-muted aria-pressed:font-medium aria-pressed:text-foreground';
+---
+
+<DashboardLayout title="Riwayat transaksi" active="transactions">
+  <div class="space-y-6">
+    <PageHeader
+      title="Riwayat transaksi"
+      description="Transaksi yang berisi menu merek Anda. Total dihitung dari item merek Anda saja."
+    >
+      <Button slot="actions" variant="outline" id="btnExportExcel">
+        <Icon name="download" />
+        Unduh laporan
+      </Button>
+    </PageHeader>
+
+    <Card padding="none">
+      <!-- FILTER -->
+      <div class="flex flex-col gap-3 border-b border-border p-4 xl:flex-row xl:flex-wrap xl:items-center">
+        <Input
+          id="searchTrxTable"
+          label="Cari transaksi"
+          hideLabel
+          icon="search"
+          type="search"
+          placeholder="Cari kode nota atau menu…"
+          class="xl:w-72"
+        />
+        <Select id="filterPayment" label="Metode bayar" hideLabel class="xl:w-48">
+          <option value="ALL">Semua metode</option>
+          <option value="CASH">Tunai</option>
+          <option value="QRIS">QRIS</option>
+          <option value="EDC">Kartu debit / EDC</option>
+        </Select>
+
+        <div
+          role="group"
+          aria-label="Rentang tanggal cepat"
+          class="inline-flex w-fit overflow-hidden rounded-md border border-input"
+        >
+          {
+            quickRanges.map((q) => (
+              <button
+                type="button"
+                data-range={q.range}
+                aria-pressed={q.range === 'all' ? 'true' : 'false'}
+                class={quickRangeClass}
+              >
+                {q.label}
+              </button>
+            ))
+          }
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+          <Input id="startDate" label="Dari tanggal" hideLabel type="date" class="sm:w-40" />
+          <span class="hidden text-muted-foreground sm:inline" aria-hidden="true">–</span>
+          <Input id="endDate" label="Sampai tanggal" hideLabel type="date" class="sm:w-40" />
+          <Button id="btnApplyFilter" variant="secondary" class="col-span-2">Terapkan</Button>
+        </div>
+      </div>
+
+      <!-- DATA -->
+      <div data-block="trx">
+        <div data-view="loading">
+          <Table columns={columns} loading skeletonRows={8} />
+        </div>
+
+        <div data-view="ready" hidden>
+          <Table columns={columns} bodyId="trxTableBody" caption="Riwayat transaksi" />
+          <div class="border-t border-border p-4">
+            <Pagination />
+          </div>
+        </div>
+
+        <div data-view="empty" hidden>
+          <EmptyState
+            icon="receipt-text"
+            title="Belum ada transaksi"
+            description="Transaksi yang berisi menu merek Anda akan muncul di sini."
+          />
+        </div>
+
+        <div data-view="no-results" hidden>
+          <EmptyState
+            icon="search"
+            title="Tidak ada transaksi yang cocok"
+            description="Ubah kata kunci, metode bayar, atau rentang tanggal."
+          />
+        </div>
+
+        <div data-view="error" hidden>
+          <EmptyState variant="error" title="Riwayat transaksi gagal dimuat" descriptionId="trxErrorMessage">
+            <Button variant="outline" size="sm" data-retry>
+              <Icon name="refresh-cw" />
+              Coba lagi
+            </Button>
+          </EmptyState>
+        </div>
+      </div>
+    </Card>
+  </div>
+
+  <!-- DIALOG RINCIAN TRANSAKSI -->
+  <Dialog id="trxDetailModal" title="Rincian transaksi" size="md">
+    <div class="space-y-4">
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <div>
+          <dt class="text-xs text-muted-foreground">Kode nota</dt>
+          <dd id="modalCode" class="mt-1 font-medium"></dd>
+        </div>
+        <div>
+          <dt class="text-xs text-muted-foreground">Metode bayar</dt>
+          <dd class="mt-1">
+            <Badge variant="outline" size="sm"><span id="modalPayMethod"></span></Badge>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-muted-foreground">Waktu</dt>
+          <dd id="modalDate" class="mt-1"></dd>
+        </div>
+        <div>
+          <dt class="text-xs text-muted-foreground">Kasir</dt>
+          <dd id="modalCashier" class="mt-1"></dd>
+        </div>
+      </dl>
+
+      <div class="rounded-lg border border-border">
+        <ul id="modalItemsList" class="divide-y divide-border"></ul>
+        <div class="flex items-center justify-between gap-4 border-t border-border px-4 py-3 text-sm font-semibold">
+          <span>Total merek ini</span>
+          <span id="modalTotal" class="tabular-nums"></span>
+        </div>
+      </div>
+    </div>
+    <Button slot="footer" variant="outline" data-dialog-close>Tutup</Button>
+  </Dialog>
+
+  <!-- DIALOG KONFIRMASI HAPUS -->
+  <Dialog
+    id="deleteTrxDialog"
+    title="Hapus transaksi ini?"
+    description="Item merek Anda di nota ini dihapus permanen dan stok produknya dikembalikan. Item merek lain di nota yang sama tidak terpengaruh."
+    closable={false}
+  >
+    <div class="space-y-3">
+      <dl class="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3 text-sm">
+        <div>
+          <dt class="sr-only">Kode nota</dt>
+          <dd id="deleteTrxCode" class="font-medium"></dd>
+        </div>
+        <div>
+          <dt class="sr-only">Total merek</dt>
+          <dd id="deleteTrxTotal" class="tabular-nums"></dd>
+        </div>
+      </dl>
+      <p id="deleteTrxError" role="alert" class="text-sm text-destructive" hidden></p>
+    </div>
+    <Fragment slot="footer">
+      <Button variant="outline" data-dialog-close>Batal</Button>
+      <Button variant="destructive" id="btnConfirmDeleteTrx">Hapus</Button>
+    </Fragment>
+  </Dialog>
+
+  <!-- TEMPLATE (diisi JS lewat textContent, aman dari HTML di data) -->
+  <template id="tplTrxRow">
+    <tr>
+      <td data-field="code" class="font-medium whitespace-nowrap"></td>
+      <td data-field="date" class="whitespace-nowrap text-muted-foreground"></td>
+      <td data-field="cashier" class="whitespace-nowrap"></td>
+      <td><span data-field="items" class="block max-w-xs truncate"></span></td>
+      <td data-field="total" data-numeric class="font-medium"></td>
+      <td><Badge variant="outline" size="sm"><span data-field="method"></span></Badge></td>
+      <td data-align="right" data-sticky>
+        <div class="inline-flex items-center gap-1">
+          <Button variant="ghost" size="icon-sm" data-action="detail" title="Lihat rincian">
+            <Icon name="receipt-text" />
+          </Button>
+          <Button variant="ghost" size="icon-sm" data-action="delete" title="Hapus transaksi">
+            <Icon name="trash-2" />
+          </Button>
+        </div>
+      </td>
+    </tr>
+  </template>
+
+  <template id="tplDetailItem">
+    <li class="flex items-start justify-between gap-4 px-4 py-3 text-sm">
+      <div class="min-w-0">
+        <p data-field="name" class="font-medium"></p>
+        <p data-field="meta" class="mt-1 text-xs text-muted-foreground tabular-nums"></p>
+      </div>
+      <span data-field="subtotal" class="shrink-0 tabular-nums"></span>
+    </li>
+  </template>
+
+  <script is:inline>
+    let allTransactions = [];
+    let filteredTransactions = [];
+    let userSession = null;
+    let targetDeleteId = null; // (baru) transaksi yang sedang dikonfirmasi untuk dihapus
+
+    // PAGINATION VARIABLES — TIDAK BERUBAH
+    let currentPage = 1;
+    const itemsPerPage = 10;
+
+    // Notifikasi: sekarang toast (sebelumnya modal "Mengerti"). Pemanggilnya tetap sama.
+    function showCustomNotif(title, message, variant = 'success') {
+      window.showToast?.({ title, message, variant });
+    }
+
+    // Helper tampilan (baru)
+    function setView(state) {
+      document.querySelectorAll('[data-block="trx"] > [data-view]').forEach((view) => {
+        view.hidden = view.dataset.view !== state;
+      });
+    }
+
+    function showError(message) {
+      document.getElementById('trxErrorMessage').textContent = message;
+      setView('error');
+    }
+
+    function cloneTemplate(id) {
+      return document.getElementById(id).content.cloneNode(true);
+    }
+
+    function setField(root, field, value) {
+      const el = root.querySelector(`[data-field="${field}"]`);
+      if (el) el.textContent = value;
+      return el;
+    }
+
+    function findTransaction(id) {
+      return allTransactions.find((item) => String(item.id) === String(id));
+    }
+
+    // Total khusus merek ini (total_amount_brand) atau fallback — TIDAK BERUBAH
+    function getBrandTotal(t) {
+      return t.total_amount_brand !== undefined ? Number(t.total_amount_brand) : Number(t.total_amount || 0);
+    }
+
+    // 1. Auth Check — TIDAK BERUBAH (nama merek kini tampil di topbar layout)
+    const sessionData = localStorage.getItem('user_session');
+    if (!sessionData) {
+      window.location.href = '/login';
+    } else {
+      userSession = JSON.parse(sessionData);
+    }
+
+    const formatRupiah = (val) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val || 0);
+
+    // 2. Fetch Transactions per brand_id — request TIDAK BERUBAH; tampilan state baru
+    async function fetchTransactions() {
+      setView('loading');
+      try {
+        const brandId = userSession?.brand_id;
+        if (!brandId) {
+          showCustomNotif('Sesi tidak valid', 'Brand ID tidak terdeteksi pada akun Anda.', 'error');
+          showError('Brand ID tidak ditemukan. Silakan login ulang.');
+          return;
+        }
+
+        const res = await fetch(`/api/transactions?brand_id=${brandId}`);
+        const result = await res.json();
+
+        if (res.ok && result.success) {
+          allTransactions = result.data || [];
+          filteredTransactions = [...allTransactions];
+          currentPage = 1;
+          renderTransactionsTable();
+        } else {
+          showError(result.message || 'Gagal mengambil riwayat transaksi.');
+        }
+      } catch (err) {
+        console.error('Fetch Transactions Error:', err);
+        showError('Gagal terhubung ke server database.');
+      }
+    }
+
+    function renderTransactionsTable() {
+      const tbody = document.getElementById('trxTableBody');
+      const totalItems = filteredTransactions.length;
+      const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+
+      if (!filteredTransactions || totalItems === 0) {
+        tbody.replaceChildren();
+        // Bedakan "belum ada data sama sekali" dan "tidak cocok dengan filter"
+        setView(allTransactions.length === 0 ? 'empty' : 'no-results');
+        updatePaginationControls(0, 0, 1, 1);
+        return;
+      }
+
+      // Slice data sesuai halaman aktif — TIDAK BERUBAH
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const endIndex = startIndex + itemsPerPage;
+      const paginatedItems = filteredTransactions.slice(startIndex, endIndex);
+
+      tbody.replaceChildren(
+        ...paginatedItems.map((t) => {
+          const itemsList = t.items || [];
+          const itemsSummary = itemsList.length > 0
+            ? itemsList.map((i) => `${i.name || i.product_name} ×${i.qty}`).join(', ')
+            : '-';
+          const formattedDate = t.created_at ? new Date(t.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '-';
+          const code = t.transaction_code || t.code;
+
+          const row = cloneTemplate('tplTrxRow');
+          row.querySelector('tr').dataset.id = t.id;
+          setField(row, 'code', code);
+          setField(row, 'date', formattedDate);
+          setField(row, 'cashier', t.cashier_name || 'Kasir');
+          setField(row, 'items', itemsSummary).title = itemsSummary;
+          setField(row, 'total', formatRupiah(getBrandTotal(t)));
+          setField(row, 'method', t.payment_method || 'CASH');
+          row.querySelector('[data-action="detail"]').setAttribute('aria-label', `Lihat rincian ${code}`);
+          row.querySelector('[data-action="delete"]').setAttribute('aria-label', `Hapus transaksi ${code}`);
+          return row;
+        }),
+      );
+
+      setView('ready');
+      updatePaginationControls(startIndex + 1, Math.min(endIndex, totalItems), totalItems, totalPages);
+    }
+
+    // Update Tampilan Tombol Pagination & Info Text — TIDAK BERUBAH (hanya teks)
+    function updatePaginationControls(start, end, total, totalPages) {
+      const btnPrev = document.getElementById('btnPrevPage');
+      const btnNext = document.getElementById('btnNextPage');
+      const pageIndicator = document.getElementById('pageIndicator');
+      const paginationInfo = document.getElementById('paginationInfo');
+
+      if (paginationInfo) {
+        paginationInfo.innerText = total > 0
+          ? `Menampilkan ${start}–${end} dari ${total} transaksi`
+          : `Menampilkan 0 dari 0 transaksi`;
+      }
+
+      if (pageIndicator) {
+        pageIndicator.innerText = `Halaman ${currentPage} dari ${totalPages}`;
+      }
+
+      if (btnPrev) btnPrev.disabled = currentPage <= 1;
+      if (btnNext) btnNext.disabled = currentPage >= totalPages;
+    }
+
+    // Event Listeners Pagination — TIDAK BERUBAH
+    document.getElementById('btnPrevPage')?.addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        renderTransactionsTable();
+      }
+    });
+
+    document.getElementById('btnNextPage')?.addEventListener('click', () => {
+      const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderTransactionsTable();
+      }
+    });
+
+    // Modal Detail — data sama; "Diskon Rp 0" & "LUNAS" yang dulu ditulis manual dihapus
+    window.openDetailModal = function (id) {
+      const t = findTransaction(id);
+      if (!t) return;
+
+      const formattedDate = t.created_at ? new Date(t.created_at).toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' }) : '-';
+
+      document.getElementById('modalCode').textContent = t.transaction_code || t.code;
+      document.getElementById('modalDate').textContent = formattedDate;
+      document.getElementById('modalCashier').textContent = t.cashier_name || 'Kasir';
+      document.getElementById('modalTotal').textContent = formatRupiah(getBrandTotal(t));
+      document.getElementById('modalPayMethod').textContent = t.payment_method || 'CASH';
+
+      const itemsContainer = document.getElementById('modalItemsList');
+      const itemsList = t.items || [];
+
+      if (itemsList.length === 0) {
+        const empty = document.createElement('li');
+        empty.className = 'px-4 py-3 text-sm text-muted-foreground';
+        empty.textContent = 'Tidak ada detail menu.';
+        itemsContainer.replaceChildren(empty);
+      } else {
+        itemsContainer.replaceChildren(
+          ...itemsList.map((item) => {
+            const itemPrice = Number(item.price || item.price_at_sale || 0);
+            const itemSubtotal = Number(item.subtotal || (item.qty * itemPrice));
+            const li = cloneTemplate('tplDetailItem');
+            setField(li, 'name', item.name || item.product_name);
+            setField(li, 'meta', `${item.qty} × ${formatRupiah(itemPrice)}`);
+            setField(li, 'subtotal', formatRupiah(itemSubtotal));
+            return li;
+          }),
+        );
+      }
+
+      document.getElementById('trxDetailModal').showModal();
+    };
+
+    // HAPUS TRANSAKSI (baru)
+    const deleteDialog = document.getElementById('deleteTrxDialog');
+    const deleteError = document.getElementById('deleteTrxError');
+    const btnConfirmDelete = document.getElementById('btnConfirmDeleteTrx');
+
+    function openDeleteDialog(id) {
+      const t = findTransaction(id);
+      if (!t) return;
+      targetDeleteId = t.id;
+      document.getElementById('deleteTrxCode').textContent = t.transaction_code || t.code;
+      document.getElementById('deleteTrxTotal').textContent = formatRupiah(getBrandTotal(t));
+      deleteError.hidden = true;
+      deleteDialog.showModal();
+    }
+
+    deleteDialog.addEventListener('close', () => {
+      targetDeleteId = null;
+    });
+
+    btnConfirmDelete.addEventListener('click', async () => {
+      if (!targetDeleteId) return;
+      const deletedId = targetDeleteId;
+      const code = document.getElementById('deleteTrxCode').textContent;
+
+      btnConfirmDelete.disabled = true;
+      btnConfirmDelete.textContent = 'Menghapus…';
+      deleteError.hidden = true;
+
+      try {
+        const brandId = userSession?.brand_id;
+        const res = await fetch(`/api/transactions?id=${deletedId}&brand_id=${brandId}`, {
+          method: 'DELETE',
+          // Wajib: DELETE tanpa Content-Type ditolak cek origin Astro di server produksi.
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok && data.success) {
+          // Hapus dari data lokal, filter & halaman yang sedang aktif tetap dipertahankan
+          allTransactions = allTransactions.filter((t) => String(t.id) !== String(deletedId));
+          filteredTransactions = filteredTransactions.filter((t) => String(t.id) !== String(deletedId));
+          const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage) || 1;
+          if (currentPage > totalPages) currentPage = totalPages;
+          renderTransactionsTable();
+          deleteDialog.close();
+          showCustomNotif('Transaksi dihapus', `Item merek Anda di nota ${code} sudah dihapus dan stoknya dikembalikan.`);
+        } else {
+          deleteError.textContent = data.message || `Gagal menghapus transaksi (kode ${res.status}).`;
+          deleteError.hidden = false;
+        }
+      } catch (err) {
+        console.error('Delete Transaction Error:', err);
+        deleteError.textContent = 'Tidak dapat terhubung ke server. Coba lagi.';
+        deleteError.hidden = false;
+      } finally {
+        btnConfirmDelete.disabled = false;
+        btnConfirmDelete.textContent = 'Hapus';
+      }
+    });
+
+    // Tombol aksi di baris tabel (menggantikan onclick inline)
+    document.getElementById('trxTableBody').addEventListener('click', (e) => {
+      const button = e.target.closest('[data-action]');
+      if (!button) return;
+      const id = button.closest('tr')?.dataset.id;
+      if (button.dataset.action === 'detail') window.openDetailModal(id);
+      if (button.dataset.action === 'delete') openDeleteDialog(id);
+    });
+
+    // Download Excel Report Handler — TIDAK BERUBAH (belum benar-benar mengunduh; lihat catatan)
+    document.getElementById('btnExportExcel')?.addEventListener('click', () => {
+      showCustomNotif('Laporan diunduh', 'Laporan riwayat transaksi merek ini berhasil di-export.');
+    });
+
+    // FILTER LOGIC CLIENT-SIDE — TIDAK BERUBAH
+    function applyFilters() {
+      const searchVal = document.getElementById('searchTrxTable').value.toLowerCase().trim();
+      const payVal = document.getElementById('filterPayment').value;
+      const startVal = document.getElementById('startDate').value ? new Date(document.getElementById('startDate').value + 'T00:00:00') : null;
+      const endVal = document.getElementById('endDate').value ? new Date(document.getElementById('endDate').value + 'T23:59:59') : null;
+
+      filteredTransactions = allTransactions.filter(t => {
+        const code = (t.transaction_code || t.code || '').toLowerCase();
+        const items = t.items || [];
+        const trxDate = t.created_at ? new Date(t.created_at) : null;
+
+        const matchSearch = code.includes(searchVal) || items.some(i => (i.name || i.product_name || '').toLowerCase().includes(searchVal));
+        const matchPay = payVal === 'ALL' || t.payment_method === payVal;
+
+        let matchDate = true;
+        if (trxDate) {
+          if (startVal && trxDate < startVal) matchDate = false;
+          if (endVal && trxDate > endVal) matchDate = false;
+        }
+
+        return matchSearch && matchPay && matchDate;
+      });
+
+      currentPage = 1; // Reset ke halaman pertama setelah filter berubah
+      renderTransactionsTable();
+    }
+
+    // Tanggal LOKAL (YYYY-MM-DD) untuk input date. Dulu memakai toISOString() (UTC),
+    // sehingga pukul 00.00–07.00 WIB "Hari ini" jatuh ke tanggal kemarin dan
+    // "Bulan ini" mulai dari tanggal terakhir bulan sebelumnya.
+    function toDateInputValue(date) {
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    }
+
+    // Quick Date Range Preset — rentang sama (minggu mulai Minggu, bulan mulai tgl 1); penanda aktif aria-pressed
+    document.querySelectorAll('.btn-quick-range').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const range = e.currentTarget.getAttribute('data-range');
+        const now = new Date();
+        const startDateInput = document.getElementById('startDate');
+        const endDateInput = document.getElementById('endDate');
+
+        document.querySelectorAll('.btn-quick-range').forEach(b => {
+          b.setAttribute('aria-pressed', 'false');
+        });
+        e.currentTarget.setAttribute('aria-pressed', 'true');
+
+        if (range === 'today') {
+          const yyyyMmDd = toDateInputValue(now);
+          startDateInput.value = yyyyMmDd;
+          endDateInput.value = yyyyMmDd;
+        } else if (range === 'week') {
+          const firstDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+          startDateInput.value = toDateInputValue(firstDay);
+          endDateInput.value = toDateInputValue(new Date());
+        } else if (range === 'month') {
+          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+          startDateInput.value = toDateInputValue(firstDay);
+          endDateInput.value = toDateInputValue(new Date());
+        } else {
+          startDateInput.value = '';
+          endDateInput.value = '';
+        }
+
+        applyFilters();
+      });
+    });
+
+    document.getElementById('searchTrxTable')?.addEventListener('input', applyFilters);
+    document.getElementById('filterPayment')?.addEventListener('change', applyFilters);
+    document.getElementById('btnApplyFilter')?.addEventListener('click', applyFilters);
+
+    // Coba lagi setelah error (baru)
+    document.querySelector('[data-retry]')?.addEventListener('click', fetchTransactions);
+
+    // Init Data saat halaman dimuat — TIDAK BERUBAH
+    fetchTransactions();
+  </script>
+</DashboardLayout>

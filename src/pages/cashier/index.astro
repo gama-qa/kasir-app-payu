@@ -1,0 +1,62 @@
+---
+// src/pages/cashier/index.astro — login kasir (halaman awal APK).
+import CashierLayout from '../../layouts/CashierLayout.astro';
+import Button from '../../components/ui/Button.astro';
+import Footer from '../../components/ui/Footer.astro';
+import Input from '../../components/ui/Input.astro';
+---
+
+<CashierLayout title="Login kasir" bodyClass="flex min-h-dvh flex-col">
+  <main class="flex flex-1 items-center justify-center p-4">
+    <div class="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xs sm:p-8">
+      <div class="mb-8 text-center">
+        <img src="/payu-logo-2.png" alt="MADEBYPAYU" width="176" height="52" class="mx-auto h-auto w-44" />
+        <p class="mt-3 text-sm font-semibold">Aplikasi Kasir POS Multi-Brand</p>
+        <p class="mt-1 text-sm text-muted-foreground">Masuk dengan akun kasir untuk memulai shift.</p>
+      </div>
+
+      <form id="cashierLoginForm" class="grid gap-4">
+        <Input id="username" label="Username kasir" placeholder="Masukkan username kasir" autocomplete="username" required />
+        <Input id="password" label="Password" type="password" placeholder="••••••••" autocomplete="current-password" required />
+        <p id="errorMessage" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" hidden></p>
+        <Button type="submit" size="lg" id="btnSubmit" class="mt-2 w-full">Masuk ke aplikasi kasir</Button>
+      </form>
+    </div>
+  </main>
+
+  <Footer />
+
+  <script>
+    import { apiRequest, getErrorMessage, type ApiBody } from '../../scripts/api';
+    import { CASHIER_HOME_URL, hasCashierSession, saveCashierSession } from '../../scripts/cashier/session';
+    import { byId, setBusy, setMessage } from '../../scripts/ui';
+
+    // Sudah login → langsung ke layar kasir (TIDAK BERUBAH).
+    if (hasCashierSession()) window.location.href = CASHIER_HOME_URL;
+
+    const form = byId<HTMLFormElement>('cashierLoginForm');
+    const errorMessage = byId('errorMessage');
+    const submit = byId<HTMLButtonElement>('btnSubmit');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      setMessage(errorMessage, null);
+      setBusy(submit, true, 'Memproses…');
+
+      try {
+        const { user } = await apiRequest<never, ApiBody<never> & { user: unknown }>('/api/auth/login', {
+          method: 'POST',
+          body: {
+            username: byId<HTMLInputElement>('username').value,
+            password: byId<HTMLInputElement>('password').value,
+          },
+        });
+        saveCashierSession(user);
+        window.location.href = CASHIER_HOME_URL;
+      } catch (error) {
+        setMessage(errorMessage, getErrorMessage(error));
+        setBusy(submit, false);
+      }
+    });
+  </script>
+</CashierLayout>

@@ -1,0 +1,44 @@
+---
+/*
+ * Kontrol halaman: info "Menampilkan x–y dari z", tombol sebelumnya/berikutnya.
+ * Isi teks & status tombol diatur oleh script halaman lewat id di bawah
+ * (default sama dengan id yang dipakai script lama).
+ */
+import Button from './Button.astro';
+import Icon from './Icon.astro';
+
+interface Props {
+  infoId?: string;
+  pageId?: string;
+  prevId?: string;
+  nextId?: string;
+  class?: string;
+}
+
+const {
+  infoId = 'paginationInfo',
+  pageId = 'pageIndicator',
+  prevId = 'btnPrevPage',
+  nextId = 'btnNextPage',
+  class: className,
+} = Astro.props;
+---
+
+<nav
+  aria-label="Navigasi halaman"
+  class:list={['flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between', className]}
+>
+  <p id={infoId} class="text-sm text-muted-foreground"></p>
+  <!-- Di layar kecil label tombol disembunyikan (tetap dibaca screen reader) agar muat. -->
+  <div class="flex items-center justify-between gap-2 sm:justify-end">
+    <Button id={prevId} variant="outline" size="sm" disabled>
+      <Icon name="chevron-left" />
+      <span class="max-sm:sr-only">Sebelumnya</span>
+    </Button>
+    <span id={pageId} class="px-2 text-sm whitespace-nowrap text-muted-foreground tabular-nums"></span>
+    <Button id={nextId} variant="outline" size="sm" disabled>
+      <span class="max-sm:sr-only">Berikutnya</span>
+      <Icon name="chevron-right" />
+    </Button>
+  </div>
+</nav>

@@ -1,24 +1,49 @@
-# build output
+# =====================================================================
+# kasir-app — file yang TIDAK boleh masuk repo
+# Native Android punya aturan tambahan sendiri di android/.gitignore
+# (build Gradle, aset hasil `cap sync`, local.properties, dll.).
+# =====================================================================
+
+# ---------- Build & cache ----------
 dist/
-
-# generated types
 .astro/
-
-# dependencies
 node_modules/
+.npm/
+*.tsbuildinfo
 
-# logs
+# ---------- Log ----------
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# environment variables
+# ---------- Rahasia & konfigurasi lingkungan ----------
+# Kredensial (database, dll.) disimpan di .env — jangan pernah di kode atau di repo.
+# Contoh nama variabel ada di .env.example (boleh di-commit, tanpa nilai rahasia).
 .env
-.env.production
+.env.*
+!.env.example
+*.pem
 
-# macOS-specific files
-.DS_Store
+# ---------- File unggahan (foto produk) ----------
+# Disimpan di server (UPLOAD_DIR), bukan di git.
+uploads/
 
-# jetbrains setting folder
+# ---------- Android: kunci tanda tangan & hasil build ----------
+# Keystore = identitas aplikasi di Play Store/perangkat. Simpan di tempat aman, JANGAN di repo.
+*.jks
+*.keystore
+keystore.properties
+*.apk
+*.aab
+
+# ---------- Editor & alat bantu lokal ----------
 .idea/
+.roo/
+*.swp
+
+# ---------- Sistem operasi ----------
+.DS_Store
+Thumbs.db
+desktop.ini

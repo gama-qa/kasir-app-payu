@@ -1,0 +1,163 @@
+---
+import Button from '../ui/Button.astro';
+import Dialog from '../ui/Dialog.astro';
+import Icon from '../ui/Icon.astro';
+import type { IconName } from '../ui/icons';
+import { PREMIUM_FEATURES, type PremiumFeatureKey } from '../../scripts/plan';
+
+export type MenuKey = 'overview' | 'products' | 'transactions' | PremiumFeatureKey;
+
+interface Props {
+  /** Menu yang sedang aktif. Kosongkan untuk halaman di luar menu utama. */
+  active?: MenuKey;
+}
+
+const { active } = Astro.props;
+
+interface NavItem {
+  key: MenuKey;
+  href: string;
+  label: string;
+  icon: IconName;
+}
+
+interface NavSection {
+  /** Judul kelompok; null untuk menu utama. */
+  heading: { label: string; icon: IconName } | null;
+  items: NavItem[];
+}
+
+const premiumItems: NavItem[] = (Object.keys(PREMIUM_FEATURES) as PremiumFeatureKey[]).map((key) => ({
+  key,
+  href: PREMIUM_FEATURES[key].href,
+  label: PREMIUM_FEATURES[key].title,
+  icon: PREMIUM_FEATURES[key].icon,
+}));
+
+const sections: NavSection[] = [
+  {
+    heading: null,
+    items: [
+      { key: 'overview', href: '/dashboard', label: 'Ringkasan', icon: 'chart-pie' },
+      { key: 'products', href: '/dashboard/products', label: 'Produk', icon: 'utensils-crossed' },
+      { key: 'transactions', href: '/dashboard/transactions', label: 'Transaksi', icon: 'receipt-text' },
+    ],
+  },
+  // Fitur berbayar: halamannya menampilkan ajakan berlangganan Premium.
+  { heading: { label: 'Premium', icon: 'crown' }, items: premiumItems },
+];
+
+// Satu definisi gaya untuk semua item navigasi (termasuk tombol Keluar).
+const itemBase =
+  'flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150';
+const itemIdle = 'text-muted-foreground hover:bg-muted hover:text-foreground';
+// Aktif: latar tint aksen + garis penanda di tepi kiri sidebar.
+const itemActive =
+  'relative bg-primary/8 font-medium text-primary before:absolute before:inset-y-1.5 before:-left-3 before:w-1 before:rounded-r-full before:bg-primary';
+---
+
+<!--
+  Desktop (lg+): sidebar tetap di kiri.
+  Mobile: tersembunyi, dibuka sebagai drawer lewat data-state="open" pada #dashboard-shell.
+-->
+<aside
+  id="dashboard-sidebar"
+  aria-label="Navigasi utama"
+  class="fixed top-0 left-0 z-40 hidden h-dvh w-60 flex-col border-r border-border bg-background lg:flex max-lg:group-data-[state=open]/shell:flex"
+>
+  <div class="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
+    <img src="/payu-logo-2.png" alt="" width="28" height="28" class="size-7 rounded-md" />
+    <div class="min-w-0 flex-1 leading-tight">
+      <p class="text-sm font-semibold">MADEBYPAYU</p>
+      <p class="text-xs text-muted-foreground">Dashboard pemilik</p>
+    </div>
+    <Button
+      variant="ghost"
+      size="icon"
+      class="-mr-2 lg:hidden"
+      data-sidebar-close
+      aria-label="Tutup menu navigasi"
+    >
+      <Icon name="x" />
+    </Button>
+  </div>
+
+  <nav class="flex-1 overflow-y-auto p-3">
+    {
+      sections.map((section) => (
+        <div class:list={[section.heading && 'mt-6']}>
+          {section.heading && (
+            <p id={`nav-${section.heading.label}`} class="flex items-center gap-2 px-3 pb-2 text-xs font-medium text-muted-foreground">
+              <Icon name={section.heading.icon} size={14} />
+              {section.heading.label}
+            </p>
+          )}
+          <ul class="space-y-1" aria-labelledby={section.heading ? `nav-${section.heading.label}` : undefined}>
+            {section.items.map((item) => {
+              const isActive = item.key === active;
+              return (
+                <li>
+                  <a
+                    href={item.href}
+                    aria-current={isActive ? 'page' : undefined}
+                    class:list={[itemBase, isActive ? itemActive : itemIdle]}
+                  >
+                    <Icon name={item.icon} />
+                    <span class="min-w-0 flex-1 truncate">{item.label}</span>
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))
+    }
+
+    <div class="my-3 border-t border-border"></div>
+
+    <a href="/cashier" target="_blank" rel="noopener" class:list={[itemBase, itemIdle]}>
+      <Icon name="monitor" />
+      <span class="flex-1">Buka aplikasi kasir</span>
+      <Icon name="external-link" size={14} />
+      <span class="sr-only">(membuka tab baru)</span>
+    </a>
+  </nav>
+
+  <div class="shrink-0 border-t border-border p-3">
+    <div class="flex items-center gap-3 px-3 py-2">
+      <span
+        data-session-field="initials"
+        aria-hidden="true"
+        class="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium"
+      ></span>
+      <div class="min-w-0 flex-1 leading-tight">
+        <p data-session-field="name" class="truncate text-sm font-medium">Pemilik bisnis</p>
+        <p data-session-field="username" class="truncate text-xs text-muted-foreground"></p>
+      </div>
+    </div>
+    <button type="button" data-dialog-open="logout-dialog" class:list={[itemBase, itemIdle]}>
+      <Icon name="log-out" />
+      Keluar
+    </button>
+  </div>
+</aside>
+
+<Dialog
+  id="logout-dialog"
+  title="Keluar dari akun?"
+  description="Anda perlu masuk lagi untuk membuka dashboard."
+  closable={false}
+>
+  <Fragment slot="footer">
+    <Button variant="outline" data-dialog-close>Batal</Button>
+    <Button variant="destructive" id="logout-confirm">Keluar</Button>
+  </Fragment>
+</Dialog>
+
+<script>
+  // Logic logout tidak berubah: hapus sesi lalu kembali ke halaman login.
+  document.getElementById('logout-confirm')?.addEventListener('click', () => {
+    localStorage.removeItem('user_session');
+    window.location.href = '/';
+  });
+</script>

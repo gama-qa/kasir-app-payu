@@ -1,0 +1,58 @@
+---
+/*
+ * Badge kecil untuk label & status.
+ * Varian status (success/warning/destructive) memakai latar tipis + titik
+ * berwarna, sedangkan teksnya tetap warna foreground agar kontras ≥ 4.5:1.
+ * Warna semantik hanya untuk status — kategori/metode bayar pakai neutral/outline.
+ */
+import type { HTMLAttributes } from 'astro/types';
+
+type Variant = 'neutral' | 'outline' | 'success' | 'warning' | 'destructive';
+type Size = 'sm' | 'md';
+
+interface Props extends HTMLAttributes<'span'> {
+  variant?: Variant;
+  size?: Size;
+  /** Titik penanda di kiri teks. Default aktif untuk varian status. */
+  dot?: boolean;
+}
+
+const { variant = 'neutral', size = 'md', dot, class: className, ...rest } = Astro.props;
+
+const isStatus = variant === 'success' || variant === 'warning' || variant === 'destructive';
+const showDot = dot ?? isStatus;
+
+const variants: Record<Variant, string> = {
+  neutral: 'bg-muted text-foreground',
+  outline: 'border border-border text-muted-foreground',
+  success: 'bg-success/10 text-foreground',
+  warning: 'bg-warning/10 text-foreground',
+  destructive: 'bg-destructive/10 text-foreground',
+};
+
+const dots: Record<Variant, string> = {
+  neutral: 'bg-muted-foreground',
+  outline: 'bg-muted-foreground',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  destructive: 'bg-destructive',
+};
+
+const sizes: Record<Size, string> = {
+  sm: 'h-5 px-2',
+  md: 'h-6 px-2',
+};
+---
+
+<span
+  class:list={[
+    'inline-flex items-center gap-1 rounded-md text-xs font-medium whitespace-nowrap',
+    variants[variant],
+    sizes[size],
+    className,
+  ]}
+  {...rest}
+>
+  {showDot && <span aria-hidden="true" class:list={['size-1.5 shrink-0 rounded-full', dots[variant]]} />}
+  <slot />
+</span>

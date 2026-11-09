@@ -1,0 +1,92 @@
+---
+/*
+ * Satu metrik: label, ikon berwarna (opsional), nilai besar, keterangan.
+ * Varian:
+ *   card  = kartu putih sendiri (default, dipakai di halaman Ringkasan)
+ *   plain = tanpa border, untuk ditaruh di dalam grup/strip metrik
+ *
+ * `tone` memilih warna ikon dari token data (chart-1…4). Pakai urutan tetap
+ * per halaman dan jangan pakai warna status (hijau/merah) untuk ikon.
+ *
+ * Untuk data dari JS: beri `valueId` + `loading`, lalu script halaman mengisi
+ * textContent elemen tersebut (skeleton otomatis hilang) dan menghapus aria-busy.
+ * Keterangan bisa lewat prop `hint` atau slot "hint" (bila perlu diubah oleh JS).
+ *
+ * Nilai memakai angka proporsional (bukan tabular-nums): angka besar yang
+ * berdiri sendiri terlihat renggang bila tabular.
+ */
+import Icon from '../ui/Icon.astro';
+import type { IconName } from '../ui/icons';
+
+type Variant = 'card' | 'plain';
+type Tone = 'chart-1' | 'chart-2' | 'chart-3' | 'chart-4';
+
+interface Props {
+  label: string;
+  /** Nilai yang sudah diformat, mis. hasil Intl.NumberFormat. */
+  value?: string;
+  /** Keterangan singkat di bawah nilai, mis. periode. */
+  hint?: string;
+  icon?: IconName;
+  tone?: Tone;
+  valueId?: string;
+  loading?: boolean;
+  variant?: Variant;
+  class?: string;
+}
+
+const {
+  label,
+  value,
+  hint,
+  icon,
+  tone = 'chart-1',
+  valueId,
+  loading = false,
+  variant = 'card',
+  class: className,
+} = Astro.props;
+
+const variants: Record<Variant, string> = {
+  card: 'rounded-xl border border-border bg-background p-5 shadow-xs',
+  plain: 'bg-background p-4',
+};
+
+// Ditulis lengkap agar terbaca oleh Tailwind.
+const tones: Record<Tone, string> = {
+  'chart-1': 'text-chart-1',
+  'chart-2': 'text-chart-2',
+  'chart-3': 'text-chart-3',
+  'chart-4': 'text-chart-4',
+};
+---
+
+<div class:list={[variants[variant], className]}>
+  <div class="flex items-start justify-between gap-3">
+    <p class="text-sm font-medium">{label}</p>
+    {icon && <Icon name={icon} size={20} class={tones[tone]} />}
+  </div>
+  <p
+    id={valueId}
+    aria-busy={loading ? 'true' : undefined}
+    class="mt-3 text-2xl font-semibold tracking-tight sm:text-[1.75rem] sm:leading-9"
+  >
+    {
+      loading ? (
+        <span class="inline-block h-8 w-32 rounded-md bg-muted align-middle">
+          <span class="sr-only">Memuat…</span>
+        </span>
+      ) : (
+        value
+      )
+    }
+  </p>
+  {
+    (hint || Astro.slots.has('hint')) && (
+      <p class="mt-1 text-xs text-muted-foreground">
+        {hint}
+        <slot name="hint" />
+      </p>
+    )
+  }
+</div>

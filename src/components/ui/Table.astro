@@ -1,0 +1,145 @@
+---
+/*
+ * Tabel data rapat (baris ±44px, header muted, hover halus).
+ * Gaya sel ada di global.css (.ui-table), jadi baris dari JavaScript ikut konsisten.
+ *
+ * Dua cara mengisi baris:
+ * 1. Prop `rows` + `columns` → dirender di server.
+ *    Aksi per baris lewat slot fungsi (huruf kecil "fragment"):
+ *      <fragment slot="actions">{(row) => <Button …/>}</fragment>
+ * 2. Slot default berisi <tr> sendiri. Untuk data dari JS, beri `bodyId`
+ *    lalu isi <tbody> dari script halaman. Pakai <td data-numeric> untuk angka.
+ *
+ * Status data: `loading` (baris skeleton statis) dan slot "empty"
+ * (tampil bila `rows` kosong; isi dengan <EmptyState/>, termasuk varian error).
+ */
+
+interface Column {
+  key: string;
+  label: string;
+  /** Rata kanan + tabular-nums. Untuk uang, qty, stok. */
+  numeric?: boolean;
+  align?: 'left' | 'center' | 'right';
+  /** Sembunyikan judul kolom secara visual (tetap dibaca screen reader). */
+  hideLabel?: boolean;
+  /** Kolom menempel di kanan saat tabel di-scroll horizontal (mis. kolom aksi di mobile). */
+  sticky?: boolean;
+  /** Format nilai sel saat dirender di server (mode `rows`). */
+  format?: (value: unknown, row: Record<string, unknown>) => string;
+  class?: string;
+}
+
+interface Props {
+  columns: Column[];
+  rows?: Record<string, unknown>[];
+  /** Keterangan tabel untuk screen reader. */
+  caption?: string;
+  /** id untuk <tbody> agar bisa diisi oleh script halaman. */
+  bodyId?: string;
+  loading?: boolean;
+  skeletonRows?: number;
+  /** Judul (tersembunyi) kolom aksi. */
+  actionsLabel?: string;
+  class?: string;
+}
+
+const {
+  columns,
+  rows = [],
+  caption,
+  bodyId,
+  loading = false,
+  skeletonRows = 5,
+  actionsLabel = 'Aksi',
+  class: className,
+} = Astro.props;
+
+const hasActions = Astro.slots.has('actions');
+const hasCustomBody = Astro.slots.has('default');
+const hasEmpty = Astro.slots.has('empty');
+const colSpan = columns.length + (hasActions ? 1 : 0);
+
+const cellAttrs = (col: Column) => ({
+  'data-numeric': col.numeric ? '' : undefined,
+  'data-align': col.align && col.align !== 'left' ? col.align : undefined,
+  'data-sticky': col.sticky ? '' : undefined,
+  class: col.class,
+});
+
+const renderValue = (col: Column, row: Record<string, unknown>) =>
+  col.format ? col.format(row[col.key], row) : String(row[col.key] ?? '');
+
+const actionsHtml =
+  hasActions && !loading && !hasCustomBody
+    ? await Promise.all(rows.map((row) => Astro.slots.render('actions', [row])))
+    : [];
+---
+
+<div class:list={['relative w-full overflow-x-auto', className]}>
+  <table class="ui-table">
+    {caption && <caption class="sr-only">{caption}</caption>}
+    <thead>
+      <tr>
+        {
+          columns.map((col) => (
+            <th scope="col" {...cellAttrs(col)}>
+              {col.hideLabel ? <span class="sr-only">{col.label}</span> : col.label}
+            </th>
+          ))
+        }
+        {
+          hasActions && (
+            <th scope="col" data-align="right">
+              <span class="sr-only">{actionsLabel}</span>
+            </th>
+          )
+        }
+      </tr>
+    </thead>
+
+    <tbody id={bodyId} aria-busy={loading ? 'true' : undefined}>
+      {
+        loading ? (
+          Array.from({ length: skeletonRows }, () => (
+            <tr data-static>
+              {columns.map((col) => (
+                <td {...cellAttrs(col)}>
+                  <span
+                    class:list={[
+                      'inline-block h-4 rounded-md bg-muted align-middle',
+                      col.numeric ? 'w-16' : 'w-24',
+                    ]}
+                  />
+                </td>
+              ))}
+              {hasActions && <td />}
+            </tr>
+          ))
+        ) : hasCustomBody ? (
+          <slot />
+        ) : rows.length === 0 ? (
+          hasEmpty && (
+            <tr data-static>
+              <td colspan={colSpan}>
+                <slot name="empty" />
+              </td>
+            </tr>
+          )
+        ) : (
+          rows.map((row, i) => (
+            <tr>
+              {columns.map((col) => <td {...cellAttrs(col)}>{renderValue(col, row)}</td>)}
+              {hasActions && (
+                <td data-align="right">
+                  <div class="inline-flex items-center gap-1">
+                    <Fragment set:html={actionsHtml[i]} />
+                  </div>
+                </td>
+              )}
+            </tr>
+          ))
+        )
+      }
+    </tbody>
+  </table>
+</div>

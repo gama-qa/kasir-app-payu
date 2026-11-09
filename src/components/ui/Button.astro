@@ -1,0 +1,60 @@
+---
+import type { HTMLAttributes } from 'astro/types';
+
+type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive' | 'success';
+type Size = 'sm' | 'md' | 'lg' | 'icon' | 'icon-sm';
+
+interface Props extends HTMLAttributes<'button'> {
+  variant?: Variant;
+  size?: Size;
+  /** Bila diisi, dirender sebagai tautan <a>. */
+  href?: string;
+  /** Atribut tautan, hanya berlaku bersama `href` (mis. target="_blank" rel="noopener"). */
+  target?: HTMLAttributes<'a'>['target'];
+  rel?: HTMLAttributes<'a'>['rel'];
+}
+
+const {
+  variant = 'primary',
+  size = 'md',
+  href,
+  type = 'button',
+  class: className,
+  ...rest
+} = Astro.props;
+
+const base =
+  'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-50';
+
+const variants: Record<Variant, string> = {
+  primary: 'bg-primary text-primary-foreground hover:bg-primary/90',
+  secondary: 'bg-muted text-foreground hover:bg-border',
+  outline: 'border border-border bg-background hover:bg-muted',
+  ghost: 'text-foreground hover:bg-muted',
+  destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+  // Aksi utama penyelesaian transaksi (mis. "Bayar") di aplikasi kasir.
+  success: 'bg-success text-success-foreground hover:bg-success/90',
+};
+
+const sizes: Record<Size, string> = {
+  sm: 'h-8 px-3',
+  md: 'h-9 px-4',
+  lg: 'h-12 px-5 text-base', // target sentuh besar (tablet kasir)
+  icon: 'size-9',
+  'icon-sm': 'size-8', // aksi di baris tabel
+};
+
+const classes = [base, variants[variant], sizes[size], className];
+---
+
+{
+  href ? (
+    <a href={href} class:list={classes} {...rest}>
+      <slot />
+    </a>
+  ) : (
+    <button type={type} class:list={classes} {...rest}>
+      <slot />
+    </button>
+  )
+}

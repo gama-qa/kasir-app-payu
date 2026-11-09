@@ -1,0 +1,65 @@
+---
+/*
+ * Kartu putih di atas latar canvas: border 1px, radius 12px, bayangan sangat tipis.
+ * Header tanpa garis pemisah (judul langsung di atas isi).
+ * Slot: default = isi, "actions" = tombol di kanan header, "footer".
+ * Jangan menaruh Card di dalam Card — untuk panel di dalam kartu pakai
+ * div ber-border rounded-lg.
+ */
+import type { HTMLAttributes } from 'astro/types';
+
+interface Props extends HTMLAttributes<'div'> {
+  title?: string;
+  description?: string;
+  /** "none" untuk isi yang sudah punya padding sendiri, mis. Table. */
+  padding?: 'none' | 'md';
+  headingLevel?: 2 | 3;
+}
+
+const {
+  title,
+  description,
+  padding = 'md',
+  headingLevel = 2,
+  class: className,
+  ...rest
+} = Astro.props;
+
+const Heading = headingLevel === 3 ? 'h3' : 'h2';
+const hasActions = Astro.slots.has('actions');
+const hasHeader = Boolean(title) || hasActions;
+const hasFooter = Astro.slots.has('footer');
+---
+
+<div
+  class:list={['overflow-hidden rounded-xl border border-border bg-background shadow-xs', className]}
+  {...rest}
+>
+  {
+    hasHeader && (
+      <div class:list={['flex items-start justify-between gap-4 px-5 pt-5', padding === 'none' && 'pb-4']}>
+        <div class="min-w-0">
+          {title && <Heading class="text-base font-semibold">{title}</Heading>}
+          {description && <p class="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+        </div>
+        {hasActions && (
+          <div class="-mt-1 flex shrink-0 items-center gap-2">
+            <slot name="actions" />
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  <div class:list={[padding === 'md' && 'p-5', padding === 'md' && hasHeader && 'pt-4']}>
+    <slot />
+  </div>
+
+  {
+    hasFooter && (
+      <div class="border-t border-border px-5 py-3">
+        <slot name="footer" />
+      </div>
+    )
+  }
+</div>

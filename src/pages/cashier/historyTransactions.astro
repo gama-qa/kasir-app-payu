@@ -1,0 +1,516 @@
+---
+// src/pages/cashier/historyTransactions.astro — riwayat transaksi & cetak ulang struk.
+import CashierLayout from '../../layouts/CashierLayout.astro';
+import PrinterDialog from '../../components/cashier/PrinterDialog.astro';
+import PrinterIndicator from '../../components/cashier/PrinterIndicator.astro';
+import Badge from '../../components/ui/Badge.astro';
+import Button from '../../components/ui/Button.astro';
+import Card from '../../components/ui/Card.astro';
+import Dialog from '../../components/ui/Dialog.astro';
+import EmptyState from '../../components/ui/EmptyState.astro';
+import Icon from '../../components/ui/Icon.astro';
+import Input from '../../components/ui/Input.astro';
+import Pagination from '../../components/ui/Pagination.astro';
+import Select from '../../components/ui/Select.astro';
+import Table from '../../components/ui/Table.astro';
+
+const columns = [
+  { key: 'code', label: 'Kode nota' },
+  { key: 'customer', label: 'Pelanggan' },
+  { key: 'date', label: 'Waktu' },
+  { key: 'method', label: 'Metode' },
+  { key: 'discount', label: 'Diskon', numeric: true },
+  { key: 'total', label: 'Total bayar', numeric: true },
+  { key: 'actions', label: 'Aksi', hideLabel: true, align: 'right' as const, sticky: true },
+];
+
+// "Semua" aktif di awal karena memang belum ada filter tanggal.
+const quickRanges = [
+  { range: 'today', label: 'Hari ini' },
+  { range: 'week', label: 'Minggu ini' },
+  { range: 'month', label: 'Bulan ini' },
+  { range: 'all', label: 'Semua' },
+];
+const quickRangeClass =
+  'h-10 px-3 text-sm font-semibold whitespace-nowrap text-muted-foreground transition-colors duration-150 not-first:border-l not-first:border-input hover:text-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground';
+---
+
+<CashierLayout title="Riwayat transaksi" bodyClass="min-h-dvh">
+  <header
+    class="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-canvas px-4 lg:px-6"
+  >
+    <Button variant="outline" href="/cashier/cashierPage" title="Kembali ke kasir">
+      <Icon name="arrow-left" />
+      <span class="max-sm:sr-only">Kembali ke kasir</span>
+    </Button>
+    <h1 class="min-w-0 truncate text-lg font-bold">Riwayat transaksi</h1>
+    <div class="ml-auto flex items-center gap-3">
+      <Button variant="outline" data-dialog-open="printerDialog" title="Printer Bluetooth" class="max-w-56">
+        <Icon name="bluetooth" />
+        <PrinterIndicator labelClass="max-md:sr-only" />
+      </Button>
+      <img src="/payu-logo-2.png" alt="MADEBYPAYU" width="96" height="28" class="hidden h-7 w-auto sm:block" />
+    </div>
+  </header>
+
+  <main class="mx-auto w-full max-w-7xl space-y-4 p-4 lg:p-6">
+    <Card padding="none">
+      <!-- FILTER -->
+      <div class="flex flex-col gap-3 border-b border-border p-4 xl:flex-row xl:flex-wrap xl:items-center">
+        <div
+          role="group"
+          aria-label="Rentang tanggal cepat"
+          class="inline-flex w-fit overflow-hidden rounded-md border border-input bg-background"
+        >
+          {
+            quickRanges.map((q) => (
+              <button
+                type="button"
+                data-range={q.range}
+                aria-pressed={q.range === 'all' ? 'true' : 'false'}
+                class={quickRangeClass}
+              >
+                {q.label}
+              </button>
+            ))
+          }
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-2 xl:flex xl:items-center">
+          <Input
+            id="searchCustomer"
+            label="Cari pelanggan atau nota"
+            hideLabel
+            icon="search"
+            type="search"
+            placeholder="Cari pelanggan / nota…"
+            autocomplete="off"
+            class="xl:w-64"
+          />
+          <Select id="filterBrand" label="Merek" hideLabel class="xl:w-48">
+            <option value="ALL">Semua merek</option>
+          </Select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+          <Input id="startDate" label="Dari tanggal" hideLabel type="date" class="sm:w-40" />
+          <span class="hidden text-muted-foreground sm:inline" aria-hidden="true">–</span>
+          <Input id="endDate" label="Sampai tanggal" hideLabel type="date" class="sm:w-40" />
+          <Button id="btnApplyFilter" variant="secondary" class="col-span-2">Terapkan</Button>
+        </div>
+      </div>
+
+      <!-- DATA. Saat pindah halaman/filter, tabel lama diredupkan (tanpa kedip skeleton). -->
+      <div
+        id="historyBlock"
+        data-block="history"
+        class="transition-opacity duration-150 data-refreshing:opacity-60"
+      >
+        <div data-view="loading">
+          <Table columns={columns} loading skeletonRows={8} />
+        </div>
+        <div data-view="ready" hidden>
+          <Table columns={columns} bodyId="historyTableBody" caption="Riwayat transaksi" />
+          <div class="border-t border-border p-4">
+            <Pagination />
+          </div>
+        </div>
+        <div data-view="empty" hidden>
+          <EmptyState
+            icon="receipt-text"
+            title="Belum ada transaksi"
+            description="Transaksi yang dibayar di kasir akan muncul di sini."
+          />
+        </div>
+        <div data-view="no-results" hidden>
+          <EmptyState
+            icon="search"
+            title="Tidak ada transaksi yang cocok"
+            description="Ubah kata kunci, merek, atau rentang tanggal."
+          />
+        </div>
+        <div data-view="error" hidden>
+          <EmptyState variant="error" title="Riwayat gagal dimuat" descriptionId="historyErrorMessage">
+            <Button variant="outline" size="sm" data-action="retry">
+              <Icon name="refresh-cw" />
+              Coba lagi
+            </Button>
+          </EmptyState>
+        </div>
+      </div>
+    </Card>
+  </main>
+
+  <!-- DIALOG RINCIAN & CETAK ULANG -->
+  <Dialog id="detailDialog" title="Rincian transaksi" size="md">
+    <div class="grid gap-4">
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <div>
+          <dt class="text-xs text-muted-foreground">Kode nota</dt>
+          <dd data-field="code" class="mt-1 font-semibold"></dd>
+        </div>
+        <div>
+          <dt class="text-xs text-muted-foreground">Pelanggan</dt>
+          <dd data-field="customer" class="mt-1 font-semibold break-words"></dd>
+        </div>
+        <div>
+          <dt class="text-xs text-muted-foreground">Waktu</dt>
+          <dd data-field="date" class="mt-1"></dd>
+        </div>
+        <div>
+          <dt class="text-xs text-muted-foreground">Metode bayar</dt>
+          <dd class="mt-1"><Badge variant="outline" size="sm"><span data-field="method"></span></Badge></dd>
+        </div>
+        <div id="detailNoteRow" class="col-span-2" hidden>
+          <dt class="text-xs text-muted-foreground">Catatan</dt>
+          <dd data-field="note" class="mt-1 break-words"></dd>
+        </div>
+      </dl>
+
+      <div class="rounded-lg border border-border">
+        <ul id="detailItems" class="divide-y divide-border"></ul>
+        <dl class="grid gap-1.5 border-t border-border px-4 py-3 text-sm">
+          <div class="flex justify-between gap-4">
+            <dt class="text-muted-foreground">Subtotal</dt>
+            <dd data-field="subtotal" class="tabular-nums"></dd>
+          </div>
+          <div class="flex justify-between gap-4">
+            <dt class="text-muted-foreground">Diskon</dt>
+            <dd data-field="discount" class="tabular-nums"></dd>
+          </div>
+          <div class="flex justify-between gap-4 border-t border-dashed border-border pt-2 font-semibold">
+            <dt>Total bayar</dt>
+            <dd data-field="total" class="tabular-nums"></dd>
+          </div>
+          <div class="flex justify-between gap-4 text-xs text-muted-foreground">
+            <dt>Uang diterima / kembalian</dt>
+            <dd data-field="cash" class="tabular-nums"></dd>
+          </div>
+        </dl>
+      </div>
+
+      <p id="reprintMessage" role="status" class="text-sm text-success" hidden></p>
+      <p id="reprintError" role="alert" class="text-sm text-destructive" hidden></p>
+    </div>
+    <Fragment slot="footer">
+      <Button variant="outline" data-dialog-close>Tutup</Button>
+      <Button variant="success" id="btnReprint">
+        <Icon name="printer" />
+        <span data-label>Cetak ulang struk</span>
+      </Button>
+    </Fragment>
+  </Dialog>
+
+  <PrinterDialog />
+
+  <!-- TEMPLATE (diisi lewat textContent, aman dari HTML di data) -->
+  <template id="tplHistoryRow">
+    <tr>
+      <td data-field="code" class="font-semibold whitespace-nowrap"></td>
+      <td><span data-field="customer" class="block max-w-48 truncate"></span></td>
+      <td data-field="date" class="whitespace-nowrap text-muted-foreground"></td>
+      <td><Badge variant="outline" size="sm"><span data-field="method"></span></Badge></td>
+      <td data-field="discount" data-numeric></td>
+      <td data-field="total" data-numeric class="font-semibold"></td>
+      <td data-align="right" data-sticky>
+        <Button variant="outline" size="sm" data-action="detail">Lihat detail</Button>
+      </td>
+    </tr>
+  </template>
+
+  <template id="tplDetailItem">
+    <li class="flex items-start justify-between gap-4 px-4 py-3 text-sm">
+      <div class="min-w-0">
+        <p data-field="name" class="font-semibold"></p>
+        <p data-field="meta" class="mt-1 text-xs text-muted-foreground tabular-nums"></p>
+      </div>
+      <span data-field="subtotal" class="shrink-0 tabular-nums"></span>
+    </li>
+  </template>
+
+  <script>
+    import { apiRequest, getErrorMessage, type ApiBody } from '../../scripts/api';
+    import { printText } from '../../scripts/cashier/printer';
+    import { printerErrorMessage } from '../../scripts/cashier/printer-ui';
+    import { buildReceipt } from '../../scripts/cashier/receipt';
+    import { endOfDayIso, quickRangeDates, startOfDayIso, type QuickRange } from '../../scripts/date';
+    import { formatNumber, formatRupiah } from '../../scripts/format';
+    import { byId, cloneTemplate, query, setBusy, setFields, setMessage, setOptions, showView } from '../../scripts/ui';
+
+    /** Bentuk data dari GET /api/transactions/historyTransactionsCashier. */
+    interface HistoryItem {
+      product_name: string | null;
+      brand_name: string | null;
+      qty: number;
+      price_at_sale: number | string;
+      subtotal: number | string;
+    }
+
+    interface HistoryTransaction {
+      transaction_code: string;
+      customer_name?: string | null;
+      note?: string | null;
+      payment_method: string;
+      discount_percent: number;
+      discount_amount: number;
+      cash_given: number;
+      change_given: number;
+      created_at: string;
+      grand_total: number;
+      items: HistoryItem[];
+    }
+
+    interface HistoryResponse extends ApiBody<never> {
+      transactions?: HistoryTransaction[];
+      total?: number;
+      brands?: string[];
+    }
+
+    const ITEMS_PER_PAGE = 10;
+    const SEARCH_DELAY_MS = 300;
+    const DEFAULT_CUSTOMER = 'Pelanggan Umum';
+
+    const el = {
+      block: byId('historyBlock'),
+      body: byId<HTMLTableSectionElement>('historyTableBody'),
+      errorMessage: byId('historyErrorMessage'),
+      search: byId<HTMLInputElement>('searchCustomer'),
+      brand: byId<HTMLSelectElement>('filterBrand'),
+      startDate: byId<HTMLInputElement>('startDate'),
+      endDate: byId<HTMLInputElement>('endDate'),
+      applyFilter: byId<HTMLButtonElement>('btnApplyFilter'),
+      pageInfo: byId('paginationInfo'),
+      pageIndicator: byId('pageIndicator'),
+      prevPage: byId<HTMLButtonElement>('btnPrevPage'),
+      nextPage: byId<HTMLButtonElement>('btnNextPage'),
+      detail: byId<HTMLDialogElement>('detailDialog'),
+      detailItems: byId<HTMLUListElement>('detailItems'),
+      detailNoteRow: byId('detailNoteRow'),
+      reprint: byId<HTMLButtonElement>('btnReprint'),
+      reprintMessage: byId('reprintMessage'),
+      reprintError: byId('reprintError'),
+    };
+
+    const state = {
+      /** Transaksi di halaman yang sedang tampil (data dari server). */
+      transactions: [] as HistoryTransaction[],
+      total: 0,
+      page: 1,
+      loaded: false,
+      /** Nomor request terakhir; respons yang datang terlambat diabaikan. */
+      requestId: 0,
+      selected: null as HistoryTransaction | null,
+    };
+
+    const customerOf = (trx: HistoryTransaction) => trx.customer_name || DEFAULT_CUSTOMER;
+    const formatDateTime = (value: string) =>
+      new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+
+    // ------------------------------------------------------------------
+    // Ambil data per halaman (filter diproses di server)
+    // ------------------------------------------------------------------
+    function hasActiveFilters(): boolean {
+      return Boolean(el.search.value.trim() || el.brand.value !== 'ALL' || el.startDate.value || el.endDate.value);
+    }
+
+    function buildQuery(): string {
+      const params = new URLSearchParams({ page: String(state.page), limit: String(ITEMS_PER_PAGE) });
+      const search = el.search.value.trim();
+      if (search) params.set('search', search);
+      if (el.brand.value !== 'ALL') params.set('brand', el.brand.value);
+      if (el.startDate.value) params.set('from', startOfDayIso(el.startDate.value));
+      if (el.endDate.value) params.set('to', endOfDayIso(el.endDate.value));
+      return params.toString();
+    }
+
+    async function loadPage(): Promise<void> {
+      const requestId = ++state.requestId;
+      if (state.loaded) el.block.dataset.refreshing = '';
+      else showView('history', 'loading');
+
+      try {
+        const result = await apiRequest<never, HistoryResponse>(
+          `/api/transactions/historyTransactionsCashier?${buildQuery()}`,
+        );
+        if (requestId !== state.requestId) return;
+
+        state.transactions = result.transactions ?? [];
+        state.total = result.total ?? state.transactions.length;
+        state.loaded = true;
+        if (result.brands) {
+          setOptions(el.brand, [new Option('Semua merek', 'ALL'), ...result.brands.map((name) => new Option(name, name))]);
+        }
+
+        // Halaman di luar jangkauan (mis. data berkurang) → pindah ke halaman terakhir.
+        const lastPage = Math.max(1, Math.ceil(state.total / ITEMS_PER_PAGE));
+        if (state.transactions.length === 0 && state.page > lastPage) {
+          state.page = lastPage;
+          return void loadPage();
+        }
+        renderTable();
+      } catch (error) {
+        if (requestId !== state.requestId) return;
+        el.errorMessage.textContent = getErrorMessage(error);
+        showView('history', 'error');
+      } finally {
+        if (requestId === state.requestId) delete el.block.dataset.refreshing;
+      }
+    }
+
+    function applyFilters(): void {
+      state.page = 1;
+      void loadPage();
+    }
+
+    function applyQuickRange(range: QuickRange): void {
+      const { start, end } = quickRangeDates(range);
+      el.startDate.value = start;
+      el.endDate.value = end;
+      document.querySelectorAll<HTMLElement>('[data-range]').forEach((button) => {
+        button.setAttribute('aria-pressed', String(button.dataset.range === range));
+      });
+      applyFilters();
+    }
+
+    function goToPage(page: number): void {
+      state.page = page;
+      void loadPage();
+    }
+
+    // ------------------------------------------------------------------
+    // Tabel
+    // ------------------------------------------------------------------
+    function renderTable(): void {
+      if (state.total === 0) {
+        showView('history', hasActiveFilters() ? 'no-results' : 'empty');
+        return;
+      }
+
+      const totalPages = Math.max(1, Math.ceil(state.total / ITEMS_PER_PAGE));
+      const start = (state.page - 1) * ITEMS_PER_PAGE;
+
+      el.body.replaceChildren(...state.transactions.map(createRow));
+      el.pageInfo.textContent = `Menampilkan ${start + 1}–${start + state.transactions.length} dari ${formatNumber(state.total)} transaksi`;
+      el.pageIndicator.textContent = `Halaman ${state.page} dari ${totalPages}`;
+      el.prevPage.disabled = state.page <= 1;
+      el.nextPage.disabled = state.page >= totalPages;
+      showView('history', 'ready');
+    }
+
+    function createRow(trx: HistoryTransaction): DocumentFragment {
+      const row = cloneTemplate('tplHistoryRow');
+      query(row, 'tr').dataset.code = trx.transaction_code;
+      setFields(row, {
+        code: trx.transaction_code,
+        customer: customerOf(trx),
+        date: formatDateTime(trx.created_at),
+        method: trx.payment_method,
+        discount: `${trx.discount_percent || 0}%`,
+        total: formatRupiah(trx.grand_total),
+      });
+      query(row, '[data-action="detail"]').setAttribute('aria-label', `Lihat detail ${trx.transaction_code}`);
+      return row;
+    }
+
+    // ------------------------------------------------------------------
+    // Rincian & cetak ulang
+    // ------------------------------------------------------------------
+    function openDetail(code: string): void {
+      const trx = state.transactions.find((item) => item.transaction_code === code);
+      if (!trx) return;
+      state.selected = trx;
+
+      const items = trx.items || [];
+      const subtotal = items.reduce((sum, item) => sum + Number(item.subtotal), 0);
+
+      setFields(el.detail, {
+        code: trx.transaction_code,
+        customer: customerOf(trx),
+        note: trx.note ?? '',
+        date: new Date(trx.created_at).toLocaleString('id-ID'),
+        method: trx.payment_method,
+        subtotal: formatRupiah(subtotal),
+        discount: `-${formatRupiah(trx.discount_amount)} (${trx.discount_percent || 0}%)`,
+        total: formatRupiah(trx.grand_total),
+        cash: `${formatRupiah(trx.cash_given)} / ${formatRupiah(trx.change_given)}`,
+      });
+      el.detailNoteRow.hidden = !trx.note;
+
+      el.detailItems.replaceChildren(
+        ...items.map((item) => {
+          const row = cloneTemplate('tplDetailItem');
+          setFields(row, {
+            name: item.product_name || 'Produk',
+            meta: `${formatNumber(item.qty)} × ${formatRupiah(item.price_at_sale)}`,
+            subtotal: formatRupiah(item.subtotal),
+          });
+          return row;
+        }),
+      );
+
+      setMessage(el.reprintMessage, null);
+      setMessage(el.reprintError, null);
+      el.detail.showModal();
+    }
+
+    async function reprint(): Promise<void> {
+      const trx = state.selected;
+      if (!trx) return;
+
+      setMessage(el.reprintMessage, null);
+      setMessage(el.reprintError, null);
+      setBusy(el.reprint, true, 'Mencetak…');
+
+      try {
+        await printText(
+          buildReceipt({
+            code: trx.transaction_code,
+            customerName: customerOf(trx),
+            note: trx.note,
+            date: new Date(trx.created_at),
+            items: (trx.items || []).map((item) => ({
+              name: item.product_name || 'Item',
+              qty: Number(item.qty),
+              price: Number(item.price_at_sale),
+              subtotal: Number(item.subtotal),
+            })),
+            total: Number(trx.grand_total),
+            copy: true,
+          }),
+        );
+        setMessage(el.reprintMessage, 'Struk berhasil dicetak ulang.');
+      } catch (error) {
+        setMessage(el.reprintError, printerErrorMessage(error));
+      } finally {
+        setBusy(el.reprint, false);
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // Event & mulai
+    // ------------------------------------------------------------------
+    let searchTimer: ReturnType<typeof setTimeout> | undefined;
+    el.search.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(applyFilters, SEARCH_DELAY_MS);
+    });
+    el.applyFilter.addEventListener('click', applyFilters);
+    document.querySelectorAll<HTMLElement>('[data-range]').forEach((button) => {
+      button.addEventListener('click', () => applyQuickRange((button.dataset.range ?? 'all') as QuickRange));
+    });
+    el.prevPage.addEventListener('click', () => goToPage(state.page - 1));
+    el.nextPage.addEventListener('click', () => goToPage(state.page + 1));
+    el.body.addEventListener('click', (event) => {
+      const button = (event.target as Element).closest('[data-action="detail"]');
+      const code = button?.closest<HTMLElement>('tr')?.dataset.code;
+      if (code) openDetail(code);
+    });
+    el.reprint.addEventListener('click', reprint);
+    document.querySelector('[data-action="retry"]')?.addEventListener('click', () => {
+      state.loaded = false;
+      void loadPage();
+    });
+
+    void loadPage();
+  </script>
+</CashierLayout>

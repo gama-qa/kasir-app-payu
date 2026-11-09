@@ -1,0 +1,144 @@
+---
+import '../styles/global.css';
+import Sidebar from '../components/dashboard/Sidebar.astro';
+import Topbar from '../components/dashboard/Topbar.astro';
+import Toast from '../components/ui/Toast.astro';
+import Footer from '../components/ui/Footer.astro';
+import type { MenuKey } from '../components/dashboard/Sidebar.astro';
+
+interface Props {
+  /** Judul halaman, dipakai di <title> dan breadcrumb topbar. */
+  title: string;
+  /** Menu sidebar yang aktif. Kosongkan untuk halaman di luar menu utama. */
+  active?: MenuKey;
+}
+
+const { title, active } = Astro.props;
+---
+
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} · MADEBYPAYU</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <slot name="head" />
+  </head>
+  <body>
+    <a
+      href="#konten"
+      class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:font-medium"
+    >
+      Lewati ke konten
+    </a>
+
+    <!-- Sebelum isi halaman: window.showToast harus sudah ada saat script halaman jalan. -->
+    <Toast />
+
+    <div id="dashboard-shell" data-state="closed" class="group/shell">
+      <Sidebar active={active} />
+
+      <div
+        data-sidebar-close
+        aria-hidden="true"
+        class="fixed inset-0 z-30 hidden bg-overlay max-lg:group-data-[state=open]/shell:block"
+      >
+      </div>
+
+      <div data-shell-content class="flex min-h-dvh flex-col bg-canvas lg:pl-60">
+        <Topbar title={title} />
+        <main id="konten" class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          <div class="mx-auto w-full max-w-7xl">
+            <slot />
+          </div>
+        </main>
+        <Footer class="px-4 pt-0 sm:px-6 lg:px-8" />
+      </div>
+    </div>
+
+    <script>
+      // ---------------------------------------------------------------
+      // 1. Data sesi untuk tampilan (nama, username, merek, inisial).
+      //    Hanya membaca localStorage; cek login tetap di tiap halaman.
+      // ---------------------------------------------------------------
+      import { getPlan, PLAN_LABELS } from '../scripts/plan';
+
+      type Session = { name?: string; username?: string; brand_name?: string; plan?: unknown };
+
+      let session: Session = {};
+      try {
+        session = JSON.parse(localStorage.getItem('user_session') || '{}');
+      } catch {
+        session = {};
+      }
+
+      const displayName = session.name || 'Pemilik bisnis';
+      const sessionFields: Record<string, string> = {
+        name: displayName,
+        username: session.username ? `@${session.username}` : '',
+        brand: session.brand_name || 'Semua Brand',
+        plan: `Paket ${PLAN_LABELS[getPlan(session)]}`,
+        initials: displayName
+          .split(' ')
+          .map((part) => part[0])
+          .join('')
+          .substring(0, 2)
+          .toUpperCase(),
+      };
+
+      document.querySelectorAll<HTMLElement>('[data-session-field]').forEach((el) => {
+        el.textContent = sessionFields[el.dataset.sessionField ?? ''] ?? '';
+      });
+      document.querySelectorAll<HTMLElement>('[data-plan-badge]').forEach((el) => {
+        el.dataset.plan = getPlan(session);
+      });
+
+      // ---------------------------------------------------------------
+      // 2. Sidebar sebagai drawer di layar < lg.
+      // ---------------------------------------------------------------
+      const shell = document.getElementById('dashboard-shell');
+      const sidebar = document.getElementById('dashboard-sidebar');
+      const content = document.querySelector<HTMLElement>('[data-shell-content]');
+      const toggle = document.querySelector<HTMLButtonElement>('[data-sidebar-toggle]');
+      const desktop = window.matchMedia('(min-width: 64rem)');
+
+      const isOpen = () => shell?.dataset.state === 'open';
+
+      function setSidebarOpen(open: boolean, { restoreFocus = true } = {}) {
+        if (!shell) return;
+        shell.dataset.state = open ? 'open' : 'closed';
+        toggle?.setAttribute('aria-expanded', String(open));
+        if (content) content.inert = open;
+        document.documentElement.style.overflow = open ? 'hidden' : '';
+
+        if (open) {
+          sidebar?.querySelector<HTMLElement>('nav a')?.focus();
+        } else if (restoreFocus) {
+          toggle?.focus();
+        }
+      }
+
+      toggle?.addEventListener('click', () => setSidebarOpen(true));
+
+      document.querySelectorAll('[data-sidebar-close]').forEach((el) => {
+        el.addEventListener('click', () => setSidebarOpen(false));
+      });
+
+      document.addEventListener('keydown', (event) => {
+        // Esc saat dialog terbuka cukup menutup dialognya saja.
+        if (event.key !== 'Escape' || !isOpen() || document.querySelector('dialog[open]')) return;
+        setSidebarOpen(false);
+      });
+
+      desktop.addEventListener('change', (event) => {
+        if (event.matches && isOpen()) setSidebarOpen(false, { restoreFocus: false });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,67 @@
+---
+/*
+ * State kosong / error untuk area data (tabel, grafik, daftar).
+ * Slot default = aksi opsional, mis. tombol "Coba lagi".
+ */
+import Icon from './Icon.astro';
+import type { IconName } from './icons';
+
+type Variant = 'empty' | 'error';
+type Size = 'sm' | 'md';
+
+interface Props {
+  title: string;
+  description?: string;
+  /** Default: "inbox" untuk empty, "circle-alert" untuk error. */
+  icon?: IconName;
+  variant?: Variant;
+  size?: Size;
+  /** id untuk paragraf deskripsi, bila teksnya perlu diganti oleh script halaman. */
+  descriptionId?: string;
+  class?: string;
+}
+
+const {
+  title,
+  description,
+  variant = 'empty',
+  size = 'md',
+  descriptionId,
+  class: className,
+} = Astro.props;
+
+const icon: IconName = Astro.props.icon ?? (variant === 'error' ? 'circle-alert' : 'inbox');
+
+const sizes: Record<Size, string> = {
+  sm: 'py-8',
+  md: 'py-12',
+};
+---
+
+<div
+  role={variant === 'error' ? 'alert' : undefined}
+  class:list={['flex flex-col items-center px-4 text-center', sizes[size], className]}
+>
+  <div class="mb-3 flex size-10 items-center justify-center rounded-lg border border-border">
+    <Icon
+      name={icon}
+      size={20}
+      class={variant === 'error' ? 'text-destructive' : 'text-muted-foreground'}
+    />
+  </div>
+  <p class="text-sm font-medium">{title}</p>
+  {
+    (description || descriptionId) && (
+      <p id={descriptionId} class="mt-1 max-w-sm text-sm text-muted-foreground">
+        {description}
+      </p>
+    )
+  }
+  {
+    Astro.slots.has('default') && (
+      <div class="mt-4 flex items-center gap-2">
+        <slot />
+      </div>
+    )
+  }
+</div>

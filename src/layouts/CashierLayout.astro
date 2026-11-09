@@ -1,0 +1,42 @@
+---
+/*
+ * Kerangka halaman aplikasi kasir (dibuka di tablet lewat APK Capacitor).
+ *
+ * Ringan untuk perangkat RAM terbatas:
+ * - CSS hasil build (global.css), bukan Tailwind CDN yang mengompilasi di perangkat
+ *   dan butuh internet.
+ * - Satu keluarga font dengan 3 ketebalan saja.
+ * - Tanpa blur/animasi berulang.
+ */
+import '../styles/global.css';
+import Toast from '../components/ui/Toast.astro';
+
+interface Props {
+  title: string;
+  /** Kelas tambahan untuk <body>, mis. tata letak layar penuh. */
+  bodyClass?: string;
+}
+
+const { title, bodyClass } = Astro.props;
+---
+
+<!doctype html>
+<html lang="id" data-theme="cashier">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7f4ef" />
+    <title>{title} · MADEBYPAYU POS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class:list={['bg-canvas', bodyClass]}>
+    <!-- Sebelum isi halaman: window.showToast harus sudah ada saat script halaman jalan. -->
+    <Toast position="bottom-left" />
+    <slot />
+  </body>
+</html>

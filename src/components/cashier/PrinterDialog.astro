@@ -1,0 +1,250 @@
+---
+/*
+ * Dialog pengaturan printer Bluetooth + inisialisasi status printer halaman.
+ * Pasang sekali per halaman kasir; buka lewat elemen data-dialog-open="printerDialog".
+ * Semua indikator [data-printer-*] di halaman ikut diperbarui otomatis.
+ */
+import Badge from '../ui/Badge.astro';
+import Button from '../ui/Button.astro';
+import Dialog from '../ui/Dialog.astro';
+import Icon from '../ui/Icon.astro';
+import PrinterIndicator from './PrinterIndicator.astro';
+---
+
+<Dialog
+  id="printerDialog"
+  title="Printer Bluetooth"
+  description="Pilih printer thermal yang sudah di-pair di pengaturan Bluetooth tablet."
+  size="md"
+>
+  <div class="grid gap-4">
+    <div class="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+      <PrinterIndicator showDetail class="text-sm font-semibold" />
+      <Button variant="outline" size="sm" id="btnDisconnectPrinter" hidden>Putuskan</Button>
+    </div>
+
+    <div>
+      <div class="flex items-center justify-between gap-3">
+        <p class="text-sm font-semibold">Perangkat</p>
+        <Button variant="ghost" size="sm" id="btnRefreshPrinters">
+          <Icon name="refresh-cw" />
+          <span data-label>Muat ulang</span>
+        </Button>
+      </div>
+      <ul id="printerDeviceList" class="mt-2 grid max-h-64 gap-2 overflow-y-auto"></ul>
+      <p id="printerListMessage" class="py-6 text-center text-sm text-muted-foreground" hidden></p>
+      <p class="mt-2 text-xs text-muted-foreground">
+        Printer tidak ada di daftar?{' '}
+        <button
+          type="button"
+          id="btnBluetoothSettings"
+          class="font-semibold text-primary underline-offset-2 hover:underline disabled:opacity-50"
+        >
+          Pair dulu di Pengaturan Bluetooth
+        </button>
+      </p>
+    </div>
+
+    <p id="printerDialogMessage" role="status" class="text-sm text-success" hidden></p>
+    <p id="printerDialogError" role="alert" class="text-sm text-destructive" hidden></p>
+  </div>
+
+  <Fragment slot="footer">
+    <Button variant="outline" id="btnDiscoverPrinters">
+      <Icon name="bluetooth-searching" />
+      <span data-label>Cari perangkat baru</span>
+    </Button>
+    <Button id="btnTestPrint">
+      <Icon name="printer" />
+      <span data-label>Tes cetak</span>
+    </Button>
+  </Fragment>
+</Dialog>
+
+<template id="tplPrinterDevice">
+  <li>
+    <button
+      type="button"
+      data-address
+      class="flex w-full items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition-colors duration-150 hover:bg-muted data-[active]:border-success data-[active]:bg-success/5"
+    >
+      <span class="min-w-0">
+        <span data-field="name" class="block truncate text-sm font-semibold"></span>
+        <span data-field="address" class="block font-mono text-xs text-muted-foreground"></span>
+      </span>
+      <Badge data-device-state="connected" variant="success" size="sm" hidden>Terhubung</Badge>
+      <Badge data-device-state="connecting" variant="warning" size="sm" hidden>Menghubungkan…</Badge>
+      <span data-device-state="idle" class="shrink-0 text-xs font-semibold text-primary">Hubungkan</span>
+    </button>
+  </li>
+</template>
+
+<script>
+  import {
+    connectPrinter,
+    disconnectPrinter,
+    discoverDevices,
+    initPrinter,
+    listPairedDevices,
+    onPrinterChange,
+    openBluetoothSettings,
+    printText,
+    type PrinterDevice,
+    type PrinterState,
+  } from '../../scripts/cashier/printer';
+  import { bindPrinterIndicators, printerErrorMessage } from '../../scripts/cashier/printer-ui';
+  import { buildTestReceipt } from '../../scripts/cashier/receipt';
+  import { byId, cloneTemplate, query, setBusy, setFields, setMessage } from '../../scripts/ui';
+
+  const dialog = {
+    list: byId<HTMLUListElement>('printerDeviceList'),
+    listMessage: byId('printerListMessage'),
+    message: byId('printerDialogMessage'),
+    error: byId('printerDialogError'),
+    refresh: byId<HTMLButtonElement>('btnRefreshPrinters'),
+    discover: byId<HTMLButtonElement>('btnDiscoverPrinters'),
+    settings: byId<HTMLButtonElement>('btnBluetoothSettings'),
+    testPrint: byId<HTMLButtonElement>('btnTestPrint'),
+    disconnect: byId<HTMLButtonElement>('btnDisconnectPrinter'),
+  };
+
+  let devices: PrinterDevice[] = [];
+  let printerState: PrinterState;
+
+  function showFeedback({ message = null, error = null }: { message?: string | null; error?: string | null }) {
+    setMessage(dialog.message, message);
+    setMessage(dialog.error, error);
+  }
+
+  // ------------------------------------------------------------------
+  // Daftar perangkat
+  // ------------------------------------------------------------------
+  function renderDevices(emptyMessage: string): void {
+    dialog.list.replaceChildren(...devices.map(createDeviceRow));
+    setMessage(dialog.listMessage, devices.length ? null : emptyMessage);
+  }
+
+  function createDeviceRow(device: PrinterDevice): DocumentFragment {
+    const row = cloneTemplate('tplPrinterDevice');
+    const button = query<HTMLButtonElement>(row, '[data-address]');
+    button.dataset.address = device.address;
+    setFields(row, { name: device.name, address: device.address });
+    syncDeviceRow(button);
+    return row;
+  }
+
+  /** Tampilkan Terhubung / Menghubungkan / Hubungkan sesuai status printer saat ini. */
+  function syncDeviceRow(button: HTMLElement): void {
+    const isCurrent = printerState?.device?.address === button.dataset.address;
+    const rowState =
+      isCurrent && printerState.status === 'connected'
+        ? 'connected'
+        : isCurrent && printerState.status === 'connecting'
+          ? 'connecting'
+          : 'idle';
+
+    button.toggleAttribute('data-active', rowState === 'connected');
+    button.querySelectorAll<HTMLElement>('[data-device-state]').forEach((badge) => {
+      badge.hidden = badge.dataset.deviceState !== rowState;
+    });
+  }
+
+  async function loadPairedDevices(): Promise<void> {
+    showFeedback({});
+    setBusy(dialog.refresh, true, 'Memuat…');
+    try {
+      devices = await listPairedDevices();
+      renderDevices('Belum ada printer ter-pair. Pair printer di Pengaturan Bluetooth, atau cari perangkat baru.');
+    } catch (error) {
+      devices = [];
+      renderDevices('');
+      showFeedback({ error: printerErrorMessage(error) });
+    } finally {
+      setBusy(dialog.refresh, false);
+    }
+  }
+
+  async function searchNewDevices(): Promise<void> {
+    showFeedback({});
+    setBusy(dialog.discover, true, 'Mencari… (±12 detik)');
+    try {
+      const found = await discoverDevices();
+      const known = new Set(devices.map((device) => device.address));
+      devices = [...devices, ...found.filter((device) => !known.has(device.address))];
+      renderDevices('Tidak ada perangkat ditemukan. Pastikan printer menyala dan dalam mode pairing.');
+    } catch (error) {
+      showFeedback({ error: printerErrorMessage(error) });
+    } finally {
+      setBusy(dialog.discover, false);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Aksi
+  // ------------------------------------------------------------------
+  async function handleDeviceClick(event: MouseEvent): Promise<void> {
+    const button = (event.target as Element).closest<HTMLElement>('[data-address]');
+    const device = devices.find((item) => item.address === button?.dataset.address);
+    if (!device || printerState.status === 'connecting') return;
+
+    showFeedback({});
+    try {
+      await connectPrinter(device);
+      showFeedback({ message: `Terhubung ke ${device.name}.` });
+    } catch (error) {
+      showFeedback({ error: printerErrorMessage(error) });
+    }
+  }
+
+  async function testPrint(): Promise<void> {
+    showFeedback({});
+    setBusy(dialog.testPrint, true, 'Mencetak…');
+    try {
+      await printText(buildTestReceipt());
+      showFeedback({ message: 'Struk percobaan terkirim ke printer.' });
+    } catch (error) {
+      showFeedback({ error: printerErrorMessage(error) });
+    } finally {
+      setBusy(dialog.testPrint, false);
+    }
+  }
+
+  async function openSettings(): Promise<void> {
+    try {
+      await openBluetoothSettings();
+    } catch (error) {
+      showFeedback({ error: printerErrorMessage(error) });
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Event & mulai
+  // ------------------------------------------------------------------
+  onPrinterChange((state) => {
+    printerState = state;
+    dialog.disconnect.hidden = state.status !== 'connected';
+    dialog.list.querySelectorAll<HTMLElement>('[data-address]').forEach(syncDeviceRow);
+
+    const unavailable = state.status === 'unavailable';
+    [dialog.refresh, dialog.discover, dialog.settings, dialog.testPrint].forEach((button) => {
+      button.disabled = unavailable;
+    });
+    if (unavailable) setMessage(dialog.listMessage, state.message ?? null);
+  });
+
+  document.querySelectorAll('[data-dialog-open="printerDialog"]').forEach((opener) => {
+    opener.addEventListener('click', () => {
+      if (printerState.status !== 'unavailable') void loadPairedDevices();
+    });
+  });
+
+  dialog.list.addEventListener('click', handleDeviceClick);
+  dialog.refresh.addEventListener('click', loadPairedDevices);
+  dialog.discover.addEventListener('click', searchNewDevices);
+  dialog.settings.addEventListener('click', openSettings);
+  dialog.testPrint.addEventListener('click', testPrint);
+  dialog.disconnect.addEventListener('click', () => void disconnectPrinter());
+
+  bindPrinterIndicators();
+  void initPrinter({ autoReconnect: true });
+</script>

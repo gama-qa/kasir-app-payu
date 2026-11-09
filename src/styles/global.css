@@ -1,0 +1,275 @@
+@import "tailwindcss" source(none);
+
+/*
+ * Hanya area dashboard & kasir yang dipindai. Halaman login owner
+ * (src/pages/index.astro) masih memakai Tailwind CDN dan tidak memuat file ini.
+ */
+@source "../layouts";
+@source "../components";
+@source "../pages/dashboard";
+@source "../pages/cashier";
+/*
+ * SEMENTARA — hapus bersama src/pages/dashboard/components.astro.
+ * File itu di-ignore git (.git/info/exclude), dan Tailwind melewati file
+ * yang di-ignore kecuali didaftarkan eksplisit seperti ini.
+ */
+@source "../pages/dashboard/components.astro";
+
+/*
+ * Dark mode berbasis class: aktif bila <html class="dark">.
+ * BELUM diaktifkan — token .dark di bawah sudah disiapkan.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------ */
+/* Design token                                                        */
+/* Netral = zinc. Satu aksen = coklat brand MADEBYPAYU.                */
+/* Warna semantik (success/warning/destructive) hanya untuk status.    */
+/* Komponen hanya boleh memakai token ini, bukan hex langsung.         */
+/* ------------------------------------------------------------------ */
+:root {
+  color-scheme: light;
+
+  --background: #ffffff; /* permukaan kartu, sidebar, topbar */
+  --canvas: #f6f6f7; /* latar area konten, agar kartu putih terlihat terpisah */
+  --foreground: #18181b; /* zinc-900 */
+  --muted: #f4f4f5; /* zinc-100 */
+  --muted-foreground: #71717a; /* zinc-500, kontras 4.8:1 di atas putih */
+  --border: #e4e4e7; /* zinc-200 */
+  --input: #e4e4e7;
+  --ring: #3d2924;
+  --overlay: rgb(9 9 11 / 0.4); /* zinc-950 / 40% untuk backdrop modal */
+
+  --primary: #3d2924; /* aksen brand */
+  --primary-foreground: #ffffff;
+
+  --destructive: #dc2626; /* red-600 */
+  --destructive-foreground: #ffffff;
+  --success: #15803d; /* green-700 */
+  --success-foreground: #ffffff;
+  --warning: #b45309; /* amber-700 */
+
+  /*
+   * Warna data (grafik & ikon metrik), dipakai dengan urutan tetap 1→4.
+   * chart-1 satu keluarga dengan coklat brand; #3d2924 sendiri tidak dipakai
+   * untuk data karena terlalu gelap & kurang chroma (terbaca abu-abu).
+   * Keempatnya lolos validate_palette.js (mode terang, latar putih):
+   * lightness band, chroma, pemisahan buta warna (ΔE ≥ 18.9), kontras ≥ 3:1.
+   * Bukan warna status — hijau/kuning/merah tetap khusus success/warning/destructive.
+   */
+  --chart-1: #b5703f; /* coklat-oranye brand */
+  --chart-2: #2563eb; /* biru */
+  --chart-3: #0d9488; /* teal */
+  --chart-4: #8b5cf6; /* ungu */
+}
+
+/*
+ * Tema aplikasi kasir (tablet/APK): palet krem-coklat asli halaman kasir,
+ * dipasang lewat <html data-theme="cashier"> di CashierLayout.
+ * Komponen yang sama (Button, Card, Dialog, …) otomatis ikut warna ini.
+ */
+[data-theme="cashier"] {
+  --background: #ffffff;
+  --canvas: #f7f4ef;
+  --foreground: #2d241e;
+  --muted: #f5efe6;
+  --muted-foreground: #736052; /* kontras 5.9:1 di atas putih */
+  --border: #e3dac9;
+  --input: #e3dac9;
+  --ring: #5c4033;
+  --primary: #3e2723;
+  --primary-foreground: #ffffff;
+  --destructive: #e11d48; /* rose-600 */
+  --success: #059669; /* emerald-600, tombol bayar */
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Disiapkan, belum dipakai. */
+.dark {
+  color-scheme: dark;
+
+  --background: #18181b; /* zinc-900 */
+  --canvas: #09090b; /* zinc-950 */
+  --foreground: #fafafa; /* zinc-50 */
+  --muted: #27272a; /* zinc-800 */
+  --muted-foreground: #a1a1aa; /* zinc-400 */
+  --border: #27272a;
+  --input: #3f3f46; /* zinc-700 */
+  --ring: #c2a39b; /* tint aksen agar terlihat di latar gelap */
+  --overlay: rgb(0 0 0 / 0.6);
+
+  --primary: #e5d7d3; /* tint terang dari coklat brand */
+  --primary-foreground: #3d2924;
+
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --success: #4ade80; /* green-400 */
+  --warning: #fbbf24; /* amber-400 */
+
+  /* Lolos validate_palette.js mode gelap (L 0.48–0.67, latar #09090b). */
+  --chart-1: #c27a45;
+  --chart-2: #3b82f6;
+  --chart-3: #0d9488;
+  --chart-4: #8b5cf6;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-canvas: var(--canvas);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  /*
+   * Radius memakai bawaan Tailwind: rounded-md = 6px (tombol, input, badge),
+   * rounded-lg = 8px (dialog, panel kecil), rounded-xl = 12px (kartu).
+   * Jangan pakai ukuran lain.
+   */
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-size: var(--text-sm); /* body 14px */
+    line-height: var(--text-sm--line-height);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Angka di tabel selalu tabular agar kolom rata. */
+  table {
+    font-feature-settings: "tnum";
+  }
+
+  /* Preflight Tailwind v4 membuat tombol ber-kursor default; kembalikan ke pointer. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Fokus keyboard selalu terlihat. */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  /* Halaman di belakang tidak ikut ter-scroll saat dialog modal terbuka. */
+  html:has(dialog[open]:modal) {
+    overflow: hidden;
+  }
+}
+
+@layer components {
+  /*
+   * Tabel data (dipakai oleh components/ui/Table.astro).
+   * Gaya sel ditulis di sini, bukan sebagai class di tiap <td>, supaya baris
+   * yang dirender lewat JavaScript otomatis ikut rapi dan konsisten.
+   * Layer "components" kalah dari utilitas Tailwind, jadi class di sel
+   * (mis. font-medium, text-muted-foreground) tetap bisa menimpa.
+   *
+   * Atribut sel:
+   *   data-numeric          → rata kanan + angka tabular (uang, qty, stok)
+   *   data-align="right"    → rata kanan (mis. kolom aksi)
+   *   data-align="center"
+   *   <tr data-static>      → baris tanpa efek hover (loading / kosong / error)
+   */
+  .ui-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  .ui-table th {
+    height: 2.5rem;
+    padding-inline: 1rem;
+    text-align: left;
+    vertical-align: middle;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-muted-foreground);
+    white-space: nowrap;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .ui-table tbody tr {
+    height: 2.75rem; /* baris rapat ±44px */
+    border-bottom: 1px solid var(--color-border);
+    transition: background-color 150ms;
+  }
+
+  .ui-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .ui-table tbody tr:hover {
+    background-color: color-mix(in oklab, var(--color-muted) 60%, transparent);
+  }
+
+  .ui-table tbody tr[data-static]:hover {
+    background-color: transparent;
+  }
+
+  .ui-table td {
+    padding: 0.25rem 1rem;
+    vertical-align: middle;
+  }
+
+  .ui-table :is(th, td)[data-numeric] {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .ui-table :is(th, td)[data-align="right"] {
+    text-align: right;
+  }
+
+  .ui-table :is(th, td)[data-align="center"] {
+    text-align: center;
+  }
+
+  /* data-sticky → kolom menempel di kanan saat tabel di-scroll (mis. aksi di mobile). */
+  .ui-table :is(th, td)[data-sticky] {
+    position: sticky;
+    right: 0;
+    background-color: var(--color-background);
+    transition: background-color 150ms;
+  }
+
+  .ui-table tbody tr:hover > td[data-sticky] {
+    background-color: color-mix(in oklab, var(--color-muted) 60%, var(--color-background));
+  }
+
+  /* Garis pemisah selama tabel kemungkinan di-scroll, supaya isi di bawahnya tidak tampak terpotong. */
+  @media (width < 80rem) {
+    .ui-table :is(th, td)[data-sticky] {
+      box-shadow: inset 1px 0 0 var(--color-border);
+    }
+  }
+}

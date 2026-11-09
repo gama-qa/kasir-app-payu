@@ -1,0 +1,89 @@
+---
+/*
+ * Notifikasi singkat yang hilang sendiri. Dipasang sekali di DashboardLayout,
+ * SEBELUM isi halaman, supaya window.showToast sudah ada saat script halaman
+ * (termasuk <script is:inline>) berjalan.
+ *
+ *   window.showToast({ title, message?, variant?: 'success' | 'error', duration? })
+ *
+ * Teks dimasukkan lewat textContent (aman dari HTML di data).
+ * Catatan: toast tidak tampil di atas <dialog> modal yang sedang terbuka;
+ * untuk error di dalam dialog, tampilkan pesan di dialog itu sendiri.
+ * Paling banyak 3 toast tampil bersamaan; yang terlama dibuang.
+ */
+import Icon from './Icon.astro';
+
+interface Props {
+  /**
+   * bottom-right (dashboard) | bottom-left (kasir: tidak menutupi tombol Bayar
+   * di panel kanan, dan berada di atas bilah pesanan di layar kecil).
+   */
+  position?: 'bottom-right' | 'bottom-left';
+}
+
+const { position = 'bottom-right' } = Astro.props;
+
+const positions = {
+  'bottom-right': 'bottom-4 sm:inset-x-auto sm:right-6 sm:bottom-6 sm:items-end',
+  'bottom-left': 'bottom-20 sm:inset-x-auto sm:left-6 sm:items-start lg:bottom-6',
+};
+---
+
+<div
+  id="toast-region"
+  class:list={['pointer-events-none fixed inset-x-4 z-50 flex flex-col items-center gap-2', positions[position]]}
+>
+</div>
+
+<template id="toast-template">
+  <div
+    class="pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border border-border bg-background p-4 shadow-md"
+  >
+    <span data-toast-icon="success" class="flex h-5 items-center text-success">
+      <Icon name="circle-check" />
+    </span>
+    <span data-toast-icon="error" class="flex h-5 items-center text-destructive" hidden>
+      <Icon name="circle-alert" />
+    </span>
+    <div class="min-w-0 flex-1">
+      <p data-toast-title class="text-sm font-medium"></p>
+      <p data-toast-message class="mt-1 text-sm text-muted-foreground"></p>
+    </div>
+    <button
+      type="button"
+      data-toast-close
+      aria-label="Tutup notifikasi"
+      class="-m-1 flex rounded-md p-1 text-muted-foreground transition-colors duration-150 hover:text-foreground"
+    >
+      <Icon name="x" />
+    </button>
+  </div>
+</template>
+
+<script is:inline>
+  window.showToast = function (options) {
+    var opts = options || {};
+    var variant = opts.variant === 'error' ? 'error' : 'success';
+    var region = document.getElementById('toast-region');
+    var template = document.getElementById('toast-template');
+    if (!region || !template) return;
+
+    var toast = template.content.firstElementChild.cloneNode(true);
+    toast.setAttribute('role', variant === 'error' ? 'alert' : 'status');
+    toast.querySelector('[data-toast-title]').textContent = opts.title || '';
+
+    var message = toast.querySelector('[data-toast-message]');
+    message.textContent = opts.message || '';
+    message.hidden = !opts.message;
+
+    toast.querySelectorAll('[data-toast-icon]').forEach(function (icon) {
+      icon.hidden = icon.getAttribute('data-toast-icon') !== variant;
+    });
+
+    var remove = function () { toast.remove(); };
+    toast.querySelector('[data-toast-close]').addEventListener('click', remove);
+    region.append(toast);
+    while (region.children.length > 3) region.firstElementChild.remove();
+    setTimeout(remove, opts.duration || (variant === 'error' ? 8000 : 5000));
+  };
+</script>

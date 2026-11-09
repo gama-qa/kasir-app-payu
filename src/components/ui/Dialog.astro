@@ -1,0 +1,132 @@
+---
+/*
+ * Dialog berbasis <dialog> native: Esc, fokus awal, dan blokir interaksi di
+ * luar modal sudah ditangani browser. Script di bawah hanya menambah:
+ *
+ *   Buka : elemen dengan data-dialog-open="<id>"   atau   dialog.showModal()
+ *   Tutup: elemen dengan data-dialog-close, Esc, atau klik backdrop
+ *          (klik backdrop bisa dimatikan lewat prop dismissible={false})
+ *
+ * Slot: default = isi (bisa di-scroll), "footer" = tombol aksi,
+ *       "icon" = ikon di atas judul (mis. dialog sukses).
+ */
+import Button from './Button.astro';
+import Icon from './Icon.astro';
+
+interface Props {
+  id: string;
+  title: string;
+  description?: string;
+  size?: 'sm' | 'md' | 'lg';
+  /** Tombol X di pojok. Matikan untuk dialog konfirmasi yang sudah punya tombol Batal. */
+  closable?: boolean;
+  /** Tutup saat klik di luar dialog. Matikan untuk form agar isian tidak hilang tak sengaja. */
+  dismissible?: boolean;
+  /** "center": judul, deskripsi & tombol di tengah — untuk dialog konfirmasi hasil (mis. sukses). */
+  align?: 'start' | 'center';
+}
+
+const {
+  id,
+  title,
+  description,
+  size = 'sm',
+  closable = true,
+  dismissible = true,
+  align = 'start',
+} = Astro.props;
+const centered = align === 'center';
+const hasIcon = Astro.slots.has('icon');
+
+const widths = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' };
+const hasBody = Astro.slots.has('default');
+const hasFooter = Astro.slots.has('footer');
+---
+
+<dialog
+  id={id}
+  aria-labelledby={`${id}-title`}
+  aria-describedby={description ? `${id}-desc` : undefined}
+  data-backdrop-close={dismissible ? '' : undefined}
+  class:list={[
+    'm-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-hidden rounded-lg border border-border bg-background p-0 text-foreground shadow-md backdrop:bg-overlay',
+    widths[size],
+  ]}
+>
+  <div class="relative flex max-h-[calc(100dvh-2rem)] flex-col gap-4 p-6">
+    <div class:list={['min-w-0', closable && 'pr-8', centered && 'text-center']}>
+      {
+        hasIcon && (
+          <div class:list={['mb-3 flex', centered && 'justify-center']}>
+            <slot name="icon" />
+          </div>
+        )
+      }
+      <h2 id={`${id}-title`} class="text-base font-semibold">{title}</h2>
+      {
+        description && (
+          <p id={`${id}-desc`} class="mt-1 text-sm text-muted-foreground">
+            {description}
+          </p>
+        )
+      }
+    </div>
+
+    {
+      hasBody && (
+        <div class="-m-1 min-h-0 flex-1 overflow-y-auto p-1">
+          <slot />
+        </div>
+      )
+    }
+
+    {
+      hasFooter && (
+        <div class:list={['mt-2 flex flex-col-reverse gap-2 sm:flex-row', centered ? 'sm:justify-center' : 'sm:justify-end']}>
+          <slot name="footer" />
+        </div>
+      )
+    }
+
+    {
+      /* Diletakkan terakhir agar fokus awal jatuh ke isi/footer, bukan ke tombol X. */
+      closable && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          class="absolute top-4 right-4"
+          data-dialog-close
+          aria-label="Tutup"
+        >
+          <Icon name="x" />
+        </Button>
+      )
+    }
+  </div>
+</dialog>
+
+<script>
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const opener = target.closest<HTMLElement>('[data-dialog-open]');
+    if (opener) {
+      const dialog = document.getElementById(opener.dataset.dialogOpen ?? '');
+      if (dialog instanceof HTMLDialogElement) dialog.showModal();
+      return;
+    }
+
+    const closer = target.closest('[data-dialog-close]');
+    if (closer) {
+      closer.closest('dialog')?.close();
+      return;
+    }
+
+    // Klik di backdrop: target-nya adalah elemen <dialog> itu sendiri,
+    // karena seluruh isi dialog dibungkus elemen anak.
+    if (target instanceof HTMLDialogElement && target.open && target.hasAttribute('data-backdrop-close')) {
+      target.close();
+    }
+  });
+</script>
